@@ -28,14 +28,16 @@ func main() {
 	webDist := filepath.Join(".", "web", "dist")
 	mux.HandleFunc("/", handlers.SPAHandler(webDist))
 
-	handler := handlers.Chain(mux, handlers.Recovery, handlers.Logger, handlers.CORS)
+	handler := handlers.Chain(mux, handlers.Recovery, handlers.Logger, handlers.SecurityHeaders, handlers.CORS(cfg), handlers.RateLimit)
 
 	server := &http.Server{
-		Addr:         ":" + port,
-		Handler:      handler,
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 30 * time.Second,
-		IdleTimeout:  120 * time.Second,
+		Addr:              ":" + port,
+		Handler:           handler,
+		ReadTimeout:       30 * time.Second,
+		ReadHeaderTimeout: 5 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    1 << 20,
 	}
 
 	go func() {

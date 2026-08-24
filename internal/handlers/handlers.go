@@ -2,10 +2,11 @@ package handlers
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -14,11 +15,26 @@ import (
 	"reviewmysocialnetworks/internal/config"
 	"reviewmysocialnetworks/internal/instagram"
 	"strings"
+	"sync"
 	"time"
 )
 
+const (
+	maxJSONBody       = 1 << 20
+	maxManualPosts    = 100
+	oauthStateCookie  = "rmsn_oauth_state"
+	authSessionCookie = "rmsn_auth_session"
+)
+
+type authSession struct {
+	accessToken string
+	userID      string
+	expiresAt   time.Time
+}
+
 type Handler struct {
-	cfg *config.Config
+	cfg      *config.Config
+	sessions sync.Map
 }
 
 func NewHandler(cfg *config.Config) *Handler {
@@ -29,6 +45,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/health", h.handleHealth)
 	mux.HandleFunc("GET /api/auth/url", h.handleAuthURL)
 	mux.HandleFunc("GET /api/auth/callback", h.handleAuthCallback)
+	mux.HandleFunc("GET /api/auth/result", h.handleAuthResult)
 	mux.HandleFunc("POST /api/analyze/token", h.handleAnalyzeToken)
 	mux.HandleFunc("POST /api/analyze/demo", h.handleAnalyzeDemo)
 	mux.HandleFunc("POST /api/analyze/manual", h.handleAnalyzeManual)
@@ -44,15 +61,26 @@ func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleAuthURL(w http.ResponseWriter, r *http.Request) {
+	now := time.Now()
+	h.sessions.Range(func(key, value any) bool {
+		if session, ok := value.(authSession); ok && now.After(session.expiresAt) {
+			h.sessions.Delete(key)
+		}
+		return true
+	})
+
 	appID, appSecret, redirectURI, _ := h.cfg.Get()
 	if appID == "" || appSecret == "" {
 		respondError(w, http.StatusBadRequest, "Instagram App ID y Secret deben estar configurados en el archivo .env")
 		return
 	}
 
-	stateBytes := make([]byte, 16)
-	_, _ = rand.Read(stateBytes)
-	state := hex.EncodeToString(stateBytes)
+	state, err := randomToken(32)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "No se pudo iniciar la autenticación")
+		return
+	}
+	setPrivateCookie(w, r, oauthStateCookie, state, 10*time.Minute)
 
 	client := instagram.NewClient(appID, appSecret)
 	mode := r.URL.Query().Get("mode")
@@ -66,17 +94,25 @@ func (h *Handler) handleAuthURL(w http.ResponseWriter, r *http.Request) {
 
 	respondJSON(w, http.StatusOK, map[string]string{
 		"auth_url": authURL,
-		"state":    state,
 	})
 }
 
 func (h *Handler) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
+	stateCookie, err := r.Cookie(oauthStateCookie)
+	state := r.URL.Query().Get("state")
+	if err != nil || state == "" || subtle.ConstantTimeCompare([]byte(stateCookie.Value), []byte(state)) != 1 {
+		clearCookie(w, r, oauthStateCookie)
+		redirectWithError(w, r, "invalid_oauth_state")
+		return
+	}
+	clearCookie(w, r, oauthStateCookie)
+
 	code := r.URL.Query().Get("code")
 	if code == "" {
 		errorParam := r.URL.Query().Get("error")
 		errorReason := r.URL.Query().Get("error_reason")
 		errorDesc := r.URL.Query().Get("error_description")
-		http.Redirect(w, r, fmt.Sprintf("/?error=%s&desc=%s", errorParam, errorDesc), http.StatusTemporaryRedirect)
+		redirectWithError(w, r, firstNonEmpty(errorParam, errorDesc, "oauth_denied"))
 		_ = errorReason
 		return
 	}
@@ -86,25 +122,47 @@ func (h *Handler) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 
 	code = strings.TrimSuffix(code, "#_")
 
-	tokenResp, err := client.ExchangeCodeForToken(code, redirectURI)
+	tokenResp, err := client.ExchangeCodeForToken(r.Context(), code, redirectURI)
 	if err != nil {
-		http.Redirect(w, r, fmt.Sprintf("/?error=token_exchange_failed&desc=%s", err.Error()), http.StatusTemporaryRedirect)
+		redirectWithError(w, r, "token_exchange_failed")
 		return
 	}
 
-	longLivedToken, err := client.ExchangeForLongLivedToken(tokenResp.AccessToken)
+	longLivedToken, err := client.ExchangeForLongLivedToken(r.Context(), tokenResp.AccessToken)
 	tokenToUse := tokenResp.AccessToken
 	if err == nil && longLivedToken != nil && longLivedToken.AccessToken != "" {
 		tokenToUse = longLivedToken.AccessToken
 	}
 
 	userID := tokenResp.GetUserID()
-	redirectTarget := fmt.Sprintf("/?access_token=%s", url.QueryEscape(tokenToUse))
-	if userID != "" {
-		redirectTarget += fmt.Sprintf("&user_id=%s", url.QueryEscape(userID))
+	sessionID, err := randomToken(32)
+	if err != nil {
+		redirectWithError(w, r, "session_creation_failed")
+		return
 	}
-	redirectTarget += "#auth_success"
-	http.Redirect(w, r, redirectTarget, http.StatusTemporaryRedirect)
+	h.sessions.Store(sessionID, authSession{accessToken: tokenToUse, userID: userID, expiresAt: time.Now().Add(5 * time.Minute)})
+	setPrivateCookie(w, r, authSessionCookie, sessionID, 5*time.Minute)
+	http.Redirect(w, r, "/#auth_success", http.StatusSeeOther)
+}
+
+func (h *Handler) handleAuthResult(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie(authSessionCookie)
+	if err != nil {
+		respondError(w, http.StatusUnauthorized, "Sesión de autenticación no disponible")
+		return
+	}
+	clearCookie(w, r, authSessionCookie)
+	value, ok := h.sessions.LoadAndDelete(cookie.Value)
+	if !ok {
+		respondError(w, http.StatusUnauthorized, "Sesión de autenticación inválida o ya utilizada")
+		return
+	}
+	session := value.(authSession)
+	if time.Now().After(session.expiresAt) {
+		respondError(w, http.StatusUnauthorized, "Sesión de autenticación caducada")
+		return
+	}
+	h.analyzeToken(w, r, session.accessToken, session.userID)
 }
 
 func (h *Handler) handleAnalyzeToken(w http.ResponseWriter, r *http.Request) {
@@ -113,28 +171,39 @@ func (h *Handler) handleAnalyzeToken(w http.ResponseWriter, r *http.Request) {
 		AccountID   string `json:"account_id,omitempty"`
 	}
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.AccessToken) == "" {
+	if err := decodeJSON(w, r, &req); err != nil || strings.TrimSpace(req.AccessToken) == "" {
 		respondError(w, http.StatusBadRequest, "El parámetro access_token es obligatorio")
 		return
 	}
-
-	appID, appSecret, _, _ := h.cfg.Get()
-	client := instagram.NewClient(appID, appSecret)
 
 	accountID := strings.TrimSpace(req.AccountID)
 	if accountID == "" {
 		accountID = "me"
 	}
 
-	profile, err := client.FetchProfile(accountID, req.AccessToken)
+	if accountID != "me" && !isDigits(accountID) {
+		respondError(w, http.StatusBadRequest, "account_id no es válido")
+		return
+	}
+	h.analyzeToken(w, r, strings.TrimSpace(req.AccessToken), accountID)
+}
+
+func (h *Handler) analyzeToken(w http.ResponseWriter, r *http.Request, accessToken, accountID string) {
+	appID, appSecret, _, _ := h.cfg.Get()
+	client := instagram.NewClient(appID, appSecret)
+	if accountID == "" {
+		accountID = "me"
+	}
+	profile, err := client.FetchProfile(r.Context(), accountID, accessToken)
 	if err != nil {
-		respondError(w, http.StatusBadGateway, fmt.Sprintf("Error obteniendo perfil de Instagram: %v", err))
+		respondError(w, http.StatusBadGateway, "No se pudo obtener el perfil de Instagram")
 		return
 	}
 
-	mediaList, err := client.FetchMediaList(accountID, req.AccessToken, 50)
+	mediaList, err := client.FetchMediaList(r.Context(), accountID, accessToken, 50)
 	if err != nil {
-		mediaList = []instagram.MediaItem{}
+		respondError(w, http.StatusBadGateway, "No se pudieron obtener las publicaciones de Instagram")
+		return
 	}
 
 	report := analyzer.AnalyzeAccount(profile, mediaList)
@@ -147,8 +216,13 @@ func (h *Handler) handleAnalyzeDemo(w http.ResponseWriter, r *http.Request) {
 		Tier string `json:"tier"`
 	}
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Tier == "" {
-		req.Tier = "A"
+	if err := decodeJSON(w, r, &req); err != nil {
+		respondError(w, http.StatusBadRequest, "Solicitud demo inválida")
+		return
+	}
+	if req.Tier != "A" && req.Tier != "B" && req.Tier != "D" && req.Tier != "F" {
+		respondError(w, http.StatusBadRequest, "El nivel demo debe ser A, B, D o F")
+		return
 	}
 
 	profile, mediaList := instagram.GetMockAccount(req.Tier)
@@ -163,13 +237,77 @@ func (h *Handler) handleAnalyzeManual(w http.ResponseWriter, r *http.Request) {
 		Media   []instagram.MediaItem `json:"media"`
 	}
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSON(w, r, &req); err != nil {
 		respondError(w, http.StatusBadRequest, "Datos de perfil y media inválidos")
+		return
+	}
+	if len(req.Media) > maxManualPosts {
+		respondError(w, http.StatusRequestEntityTooLarge, "Demasiadas publicaciones; el máximo es 100")
 		return
 	}
 
 	report := analyzer.AnalyzeAccount(&req.Profile, req.Media)
 	respondJSON(w, http.StatusOK, report)
+}
+
+func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) error {
+	r.Body = http.MaxBytesReader(w, r.Body, maxJSONBody)
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(dst); err != nil {
+		return err
+	}
+	var extra any
+	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
+		return errors.New("solo se permite un objeto JSON")
+	}
+	return nil
+}
+
+func randomToken(size int) (string, error) {
+	b := make([]byte, size)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
+}
+
+func setPrivateCookie(w http.ResponseWriter, r *http.Request, name, value string, ttl time.Duration) {
+	http.SetCookie(w, &http.Cookie{Name: name, Value: value, Path: "/api/auth", HttpOnly: true, Secure: requestIsHTTPS(r), SameSite: http.SameSiteLaxMode, MaxAge: int(ttl.Seconds())})
+}
+
+func clearCookie(w http.ResponseWriter, r *http.Request, name string) {
+	http.SetCookie(w, &http.Cookie{Name: name, Path: "/api/auth", HttpOnly: true, Secure: requestIsHTTPS(r), SameSite: http.SameSiteLaxMode, MaxAge: -1})
+}
+
+func requestIsHTTPS(r *http.Request) bool {
+	return r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+}
+
+func redirectWithError(w http.ResponseWriter, r *http.Request, code string) {
+	params := url.Values{"error": {code}}
+	http.Redirect(w, r, "/?"+params.Encode(), http.StatusSeeOther)
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return "oauth_error"
+}
+
+func isDigits(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, ch := range value {
+		if ch < '0' || ch > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func SPAHandler(distDir string) http.HandlerFunc {
@@ -179,7 +317,13 @@ func SPAHandler(distDir string) http.HandlerFunc {
 			return
 		}
 
-		path := filepath.Join(distDir, filepath.Clean(r.URL.Path))
+		cleanPath := strings.TrimPrefix(filepath.Clean(r.URL.Path), string(filepath.Separator))
+		path := filepath.Join(distDir, cleanPath)
+		rel, relErr := filepath.Rel(distDir, path)
+		if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			http.NotFound(w, r)
+			return
+		}
 		info, err := os.Stat(path)
 
 		if errors.Is(err, os.ErrNotExist) || info.IsDir() {
@@ -188,6 +332,9 @@ func SPAHandler(distDir string) http.HandlerFunc {
 			return
 		}
 
+		if strings.HasPrefix(r.URL.Path, "/assets/") {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		}
 		http.ServeFile(w, r, path)
 	}
 }

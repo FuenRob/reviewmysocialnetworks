@@ -1,22 +1,26 @@
-import React, { useState, useEffect } from 'react';
-import confetti from 'canvas-confetti';
-import { analyzeWithToken, analyzeDemo } from './api/client';
+import React, { lazy, Suspense, useState, useEffect, useRef } from 'react';
+import { getAuthResult, analyzeDemo } from './api/client';
 import type { AccountReport } from './types/instagram';
 import { Navbar } from './components/Navbar';
 import { HeroConnect } from './components/HeroConnect';
 import { ExecutiveSummaryCard } from './components/ExecutiveSummaryCard';
 import { KPIStatsGrid } from './components/KPIStatsGrid';
-import { EngagementCharts } from './components/EngagementCharts';
 import { ReportActionPlan } from './components/ReportActionPlan';
 import { MediaGrid } from './components/MediaGrid';
 import { PreFooter } from './components/PreFooter';
 import { LegalModal, type LegalDocType } from './components/LegalModal';
 import { ArrowUp } from 'lucide-react';
 
+const EngagementCharts = lazy(() => import('./components/EngagementCharts').then((module) => ({ default: module.EngagementCharts })));
+
 export const App: React.FC = () => {
+  const authResultRequested = useRef(false);
   const [report, setReport] = useState<AccountReport | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [globalError, setGlobalError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(() => window.location.hash === '#auth_success');
+  const [globalError, setGlobalError] = useState<string | null>(() => {
+    const error = new URLSearchParams(window.location.search).get('error');
+    return error ? `Error en autenticación de Instagram: ${error}` : null;
+  });
 
   const [isLegalOpen, setIsLegalOpen] = useState(false);
   const [activeLegalDoc, setActiveLegalDoc] = useState<LegalDocType>('aviso-legal');
@@ -26,20 +30,34 @@ export const App: React.FC = () => {
     setIsLegalOpen(true);
   };
 
+  const handleSetReport = (newReport: AccountReport) => {
+    setReport(newReport);
+    setGlobalError(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    if (newReport.overall_grade === 'A') {
+      void import('canvas-confetti').then(({ default: confetti }) => confetti({
+        particleCount: 80,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ['#10B981', '#34D399', '#6EE7B7', '#FBBF24'],
+      }));
+    }
+  };
+
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
-    const token = searchParams.get('access_token');
-    const userId = searchParams.get('user_id');
     const error = searchParams.get('error');
-    const desc = searchParams.get('desc');
+    const authSuccess = window.location.hash === '#auth_success';
 
     if (error) {
-      setGlobalError(`Error en autenticación de Instagram: ${desc || error}`);
       window.history.replaceState({}, document.title, window.location.pathname);
-    } else if (token) {
+    } else if (authSuccess) {
+      if (authResultRequested.current) return;
+      authResultRequested.current = true;
       setLoading(true);
       window.history.replaceState({}, document.title, window.location.pathname);
-      analyzeWithToken(token, userId || undefined)
+      getAuthResult()
         .then((res) => {
           handleSetReport(res);
         })
@@ -49,21 +67,6 @@ export const App: React.FC = () => {
         .finally(() => setLoading(false));
     }
   }, []);
-
-  const handleSetReport = (newReport: AccountReport) => {
-    setReport(newReport);
-    setGlobalError(null);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-
-    if (newReport.overall_grade === 'A') {
-      confetti({
-        particleCount: 80,
-        spread: 70,
-        origin: { y: 0.6 },
-        colors: ['#10B981', '#34D399', '#6EE7B7', '#FBBF24'],
-      });
-    }
-  };
 
   const handleLoadDemo = async (tier: 'A' | 'B' | 'D' | 'F') => {
     setLoading(true);
@@ -115,7 +118,9 @@ export const App: React.FC = () => {
           <div className="space-y-8 animate-in fade-in duration-500">
             <ExecutiveSummaryCard report={report} />
             <KPIStatsGrid report={report} />
-            <EngagementCharts report={report} />
+            <Suspense fallback={<div className="h-80 rounded-3xl bg-slate-900/80 animate-pulse" />}>
+              <EngagementCharts report={report} />
+            </Suspense>
             <ReportActionPlan report={report} />
             <MediaGrid media={report.media_analysis} />
 
@@ -184,6 +189,7 @@ export const App: React.FC = () => {
       </footer>
 
       <LegalModal
+        key={activeLegalDoc}
         isOpen={isLegalOpen}
         initialDoc={activeLegalDoc}
         onClose={() => setIsLegalOpen(false)}

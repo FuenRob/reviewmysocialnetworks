@@ -57,6 +57,10 @@ func LoadEnvFile(filename string) {
 		getEnv("INSTAGRAM_APP_SECRET", AppConfig.InstagramAppSecret),
 		getEnv("INSTAGRAM_REDIRECT_URI", AppConfig.InstagramRedirectURI),
 	)
+	AppConfig.mu.Lock()
+	AppConfig.Port = getEnv("PORT", AppConfig.Port)
+	AppConfig.FrontendURL = getEnv("FRONTEND_URL", AppConfig.FrontendURL)
+	AppConfig.mu.Unlock()
 }
 
 func (c *Config) Update(appID, appSecret, redirectURI string) {
@@ -80,6 +84,12 @@ func (c *Config) Get() (appID, appSecret, redirectURI, port string) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.InstagramAppID, c.InstagramAppSecret, c.InstagramRedirectURI, c.Port
+}
+
+func (c *Config) GetFrontendURL() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.FrontendURL
 }
 
 func (c *Config) IsConfigured() bool {

@@ -2,12 +2,21 @@ import type { AccountReport } from '../types/instagram';
 
 const API_BASE = '/api';
 
-export async function getAuthURL(mode?: 'business' | 'basic'): Promise<{ auth_url: string; state: string }> {
+export async function getAuthURL(mode?: 'business' | 'basic'): Promise<{ auth_url: string }> {
   const url = mode === 'basic' ? `${API_BASE}/auth/url?mode=basic` : `${API_BASE}/auth/url`;
   const res = await fetch(url);
   if (!res.ok) {
     const err = await res.json();
     throw new Error(err.error || 'Error al generar la URL de autorización de Instagram');
+  }
+  return res.json();
+}
+
+export async function getAuthResult(): Promise<AccountReport> {
+  const res = await fetch(`${API_BASE}/auth/result`, { credentials: 'same-origin' });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || 'No se pudo completar el análisis autenticado');
   }
   return res.json();
 }

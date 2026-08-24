@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"reviewmysocialnetworks/internal/analyzer"
 	"reviewmysocialnetworks/internal/config"
+	"strings"
 	"testing"
 )
 
@@ -62,5 +63,41 @@ func TestHandler_AnalyzeDemo(t *testing.T) {
 		if string(report.OverallGrade) != tier {
 			t.Errorf("Expected grade %s, got %s (score %d)", tier, report.OverallGrade, report.OverallScore)
 		}
+	}
+}
+
+func TestAuthCallbackRejectsMissingState(t *testing.T) {
+	h := NewHandler(&config.Config{})
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/callback?code=test", nil)
+	w := httptest.NewRecorder()
+	h.handleAuthCallback(w, req)
+	if w.Code != http.StatusSeeOther {
+		t.Fatalf("expected redirect, got %d", w.Code)
+	}
+	if location := w.Header().Get("Location"); location != "/?error=invalid_oauth_state" {
+		t.Fatalf("unexpected redirect location %q", location)
+	}
+}
+
+func TestAnalyzeManualRejectsOversizedBody(t *testing.T) {
+	h := NewHandler(&config.Config{})
+	largeBody := strings.NewReader(`{"profile":{},"media":[],"padding":"` + strings.Repeat("x", maxJSONBody) + `"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/analyze/manual", largeBody)
+	w := httptest.NewRecorder()
+	h.handleAnalyzeManual(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected bad request, got %d", w.Code)
+	}
+}
+
+func TestCORSRejectsUnknownPreflightOrigin(t *testing.T) {
+	cfg := &config.Config{FrontendURL: "https://app.example"}
+	handler := CORS(cfg)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
+	req := httptest.NewRequest(http.MethodOptions, "/api/analyze/demo", nil)
+	req.Header.Set("Origin", "https://evil.example")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected forbidden, got %d", w.Code)
 	}
 }

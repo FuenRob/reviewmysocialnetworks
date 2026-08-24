@@ -12,10 +12,6 @@ interface Props {
 export const LegalModal: React.FC<Props> = ({ isOpen, initialDoc = 'aviso-legal', onClose }) => {
   const [activeTab, setActiveTab] = useState<LegalDocType>(initialDoc);
 
-  React.useEffect(() => {
-    setActiveTab(initialDoc);
-  }, [initialDoc]);
-
   if (!isOpen) return null;
 
   const tabs: { id: LegalDocType; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
