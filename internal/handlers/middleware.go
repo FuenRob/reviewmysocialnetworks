@@ -1,9 +1,12 @@
 package handlers
 
 import (
+	"compress/gzip"
+	"io"
 	"log"
+	"net"
 	"net/http"
-	"net/url"
+	"path/filepath"
 	"reviewmysocialnetworks/internal/config"
 	"strings"
 	"sync"
@@ -79,41 +82,123 @@ var visitors = struct {
 	m map[string]visitor
 }{m: make(map[string]visitor)}
 
-func RateLimit(next http.Handler) http.Handler {
+func RateLimit(cfg *config.Config) Middleware {
+	trustProxy := cfg.IsTrustedProxy()
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if !strings.HasPrefix(r.URL.Path, "/api/") || r.URL.Path == "/api/health" {
+				next.ServeHTTP(w, r)
+				return
+			}
+			host := clientIP(r, trustProxy)
+			now := time.Now()
+			visitors.Lock()
+			v := visitors.m[host]
+			if now.Sub(v.window) >= time.Minute {
+				v = visitor{window: now}
+			}
+			v.count++
+			visitors.m[host] = v
+			limited := v.count > 60
+			if len(visitors.m) > 10000 {
+				for key, value := range visitors.m {
+					if now.Sub(value.window) > 2*time.Minute {
+						delete(visitors.m, key)
+					}
+				}
+			}
+			visitors.Unlock()
+			if limited {
+				w.Header().Set("Retry-After", "60")
+				w.Header().Set("Content-Type", "application/json; charset=utf-8")
+				http.Error(w, `{"error":"Demasiadas solicitudes"}`, http.StatusTooManyRequests)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func clientIP(r *http.Request, trustProxy bool) string {
+	if trustProxy {
+		if value := strings.TrimSpace(r.Header.Get("CF-Connecting-IP")); net.ParseIP(value) != nil {
+			return value
+		}
+		if value := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-For"), ",")[0]); net.ParseIP(value) != nil {
+			return value
+		}
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err == nil && host != "" {
+		return host
+	}
+	return r.RemoteAddr
+}
+
+func Compression(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.HasPrefix(r.URL.Path, "/api/") || r.URL.Path == "/api/health" {
+		if r.Method == http.MethodHead || r.Method == http.MethodOptions || r.Header.Get("Range") != "" || !acceptsGzip(r.Header.Get("Accept-Encoding")) || isCompressedAsset(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}
-		host := r.RemoteAddr
-		if parsed, err := url.Parse("http://" + r.RemoteAddr); err == nil && parsed.Hostname() != "" {
-			host = parsed.Hostname()
-		}
-		now := time.Now()
-		visitors.Lock()
-		v := visitors.m[host]
-		if now.Sub(v.window) >= time.Minute {
-			v = visitor{window: now}
-		}
-		v.count++
-		visitors.m[host] = v
-		limited := v.count > 60
-		if len(visitors.m) > 10000 {
-			for key, value := range visitors.m {
-				if now.Sub(value.window) > 2*time.Minute {
-					delete(visitors.m, key)
-				}
-			}
-		}
-		visitors.Unlock()
-		if limited {
-			w.Header().Set("Retry-After", "60")
-			w.Header().Set("Content-Type", "application/json; charset=utf-8")
-			http.Error(w, `{"error":"Demasiadas solicitudes"}`, http.StatusTooManyRequests)
+
+		w.Header().Add("Vary", "Accept-Encoding")
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Header().Del("Content-Length")
+		writer, err := gzip.NewWriterLevel(w, gzip.BestSpeed)
+		if err != nil {
+			next.ServeHTTP(w, r)
 			return
 		}
-		next.ServeHTTP(w, r)
+		defer writer.Close()
+		next.ServeHTTP(&gzipResponseWriter{ResponseWriter: w, writer: writer}, r)
 	})
+}
+
+type gzipResponseWriter struct {
+	http.ResponseWriter
+	writer *gzip.Writer
+}
+
+func (w *gzipResponseWriter) WriteHeader(statusCode int) {
+	w.Header().Del("Content-Length")
+	w.ResponseWriter.WriteHeader(statusCode)
+}
+
+func (w *gzipResponseWriter) Write(body []byte) (int, error) {
+	w.Header().Del("Content-Length")
+	return w.writer.Write(body)
+}
+
+func (w *gzipResponseWriter) Flush() {
+	_ = w.writer.Flush()
+	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
+func (w *gzipResponseWriter) ReadFrom(reader io.Reader) (int64, error) {
+	w.Header().Del("Content-Length")
+	return io.Copy(w.writer, reader)
+}
+
+func acceptsGzip(value string) bool {
+	for _, encoding := range strings.Split(value, ",") {
+		parts := strings.Split(strings.TrimSpace(encoding), ";")
+		if strings.EqualFold(parts[0], "gzip") {
+			return len(parts) == 1 || !strings.Contains(strings.Join(parts[1:], ";"), "q=0")
+		}
+	}
+	return false
+}
+
+func isCompressedAsset(path string) bool {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".png", ".jpg", ".jpeg", ".gif", ".webp", ".woff", ".woff2", ".zip", ".gz", ".br", ".mp4", ".webm":
+		return true
+	default:
+		return false
+	}
 }
 
 func Recovery(next http.Handler) http.Handler {

@@ -2,7 +2,11 @@ package config
 
 import (
 	"bufio"
+	"errors"
+	"fmt"
+	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -14,6 +18,7 @@ type Config struct {
 	InstagramAppSecret   string `json:"instagram_app_secret"`
 	InstagramRedirectURI string `json:"instagram_redirect_uri"`
 	FrontendURL          string `json:"frontend_url"`
+	TrustProxy           bool   `json:"trust_proxy"`
 }
 
 var AppConfig *Config
@@ -25,6 +30,7 @@ func init() {
 		InstagramAppSecret:   getEnv("INSTAGRAM_APP_SECRET", ""),
 		InstagramRedirectURI: getEnv("INSTAGRAM_REDIRECT_URI", "http://localhost:8080/api/auth/callback"),
 		FrontendURL:          getEnv("FRONTEND_URL", "http://localhost:8080"),
+		TrustProxy:           getEnvBool("TRUST_PROXY", false),
 	}
 }
 
@@ -60,6 +66,7 @@ func LoadEnvFile(filename string) {
 	AppConfig.mu.Lock()
 	AppConfig.Port = getEnv("PORT", AppConfig.Port)
 	AppConfig.FrontendURL = getEnv("FRONTEND_URL", AppConfig.FrontendURL)
+	AppConfig.TrustProxy = getEnvBool("TRUST_PROXY", AppConfig.TrustProxy)
 	AppConfig.mu.Unlock()
 }
 
@@ -92,6 +99,26 @@ func (c *Config) GetFrontendURL() string {
 	return c.FrontendURL
 }
 
+func (c *Config) IsTrustedProxy() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.TrustProxy
+}
+
+func (c *Config) Validate() error {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	port, err := strconv.Atoi(c.Port)
+	if err != nil || port < 1 || port > 65535 {
+		return fmt.Errorf("PORT debe ser un número entre 1 y 65535")
+	}
+	if err := validateHTTPURL("INSTAGRAM_REDIRECT_URI", c.InstagramRedirectURI); err != nil {
+		return err
+	}
+	return validateHTTPURL("FRONTEND_URL", c.FrontendURL)
+}
+
 func (c *Config) IsConfigured() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -103,4 +130,24 @@ func getEnv(key, defaultVal string) string {
 		return val
 	}
 	return defaultVal
+}
+
+func getEnvBool(key string, defaultVal bool) bool {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return defaultVal
+	}
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
+		return defaultVal
+	}
+	return parsed
+}
+
+func validateHTTPURL(name, value string) error {
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return errors.New(name + " debe ser una URL absoluta http:// o https://")
+	}
+	return nil
 }

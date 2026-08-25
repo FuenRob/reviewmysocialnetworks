@@ -18,6 +18,9 @@ func main() {
 	config.LoadEnvFile(".env")
 
 	cfg := config.AppConfig
+	if err := cfg.Validate(); err != nil {
+		log.Fatalf("❌ Configuración inválida: %v", err)
+	}
 	appID, _, redirectURI, port := cfg.Get()
 
 	mux := http.NewServeMux()
@@ -28,7 +31,7 @@ func main() {
 	webDist := filepath.Join(".", "web", "dist")
 	mux.HandleFunc("/", handlers.SPAHandler(webDist))
 
-	handler := handlers.Chain(mux, handlers.Recovery, handlers.Logger, handlers.SecurityHeaders, handlers.CORS(cfg), handlers.RateLimit)
+	handler := handlers.Chain(mux, handlers.Compression, handlers.Recovery, handlers.Logger, handlers.SecurityHeaders, handlers.CORS(cfg), handlers.RateLimit(cfg))
 
 	server := &http.Server{
 		Addr:              ":" + port,

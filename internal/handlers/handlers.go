@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -17,6 +18,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 const (
@@ -245,6 +247,10 @@ func (h *Handler) handleAnalyzeManual(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusRequestEntityTooLarge, "Demasiadas publicaciones; el máximo es 100")
 		return
 	}
+	if err := validateManualInput(req.Profile, req.Media); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 
 	report := analyzer.AnalyzeAccount(&req.Profile, req.Media)
 	respondJSON(w, http.StatusOK, report)
@@ -308,6 +314,112 @@ func isDigits(value string) bool {
 		}
 	}
 	return true
+}
+
+func validateManualInput(profile instagram.UserProfile, media []instagram.MediaItem) error {
+	if err := maxLengths(map[string]struct {
+		value string
+		max   int
+	}{
+		"profile.id":           {profile.ID, 128},
+		"profile.username":     {profile.Username, 64},
+		"profile.name":         {profile.Name, 256},
+		"profile.biography":    {profile.Biography, 2200},
+		"profile.account_type": {profile.AccountType, 64},
+	}); err != nil {
+		return err
+	}
+	if err := validateURLField("profile.profile_picture_url", profile.ProfilePictureURL); err != nil {
+		return err
+	}
+	if err := validateURLField("profile.website", profile.Website); err != nil {
+		return err
+	}
+	if !validCount(profile.FollowersCount) || !validCount(profile.FollowsCount) || !validCount(profile.MediaCount) {
+		return errors.New("los contadores del perfil deben estar entre 0 y 1.000.000.000")
+	}
+
+	for i, item := range media {
+		prefix := fmt.Sprintf("media[%d]", i)
+		if err := maxLengths(map[string]struct {
+			value string
+			max   int
+		}{
+			prefix + ".id":                 {item.ID, 128},
+			prefix + ".caption":            {item.Caption, 2200},
+			prefix + ".media_type":         {item.MediaType, 32},
+			prefix + ".media_product_type": {item.MediaProductType, 32},
+		}); err != nil {
+			return err
+		}
+		for name, value := range map[string]string{
+			prefix + ".media_url":     item.MediaURL,
+			prefix + ".thumbnail_url": item.ThumbnailURL,
+			prefix + ".permalink":     item.Permalink,
+		} {
+			if err := validateURLField(name, value); err != nil {
+				return err
+			}
+		}
+		if !validCount(item.LikeCount) || !validCount(item.CommentsCount) {
+			return fmt.Errorf("%s contiene contadores fuera del rango permitido", prefix)
+		}
+		if item.Timestamp.IsZero() || item.Timestamp.Before(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)) || item.Timestamp.After(time.Now().Add(24*time.Hour)) {
+			return fmt.Errorf("%s.timestamp está fuera del rango permitido", prefix)
+		}
+		if len(item.Children) > 20 {
+			return fmt.Errorf("%s contiene más de 20 elementos hijos", prefix)
+		}
+		for childIndex, child := range item.Children {
+			childPrefix := fmt.Sprintf("%s.children[%d]", prefix, childIndex)
+			if err := maxLengths(map[string]struct {
+				value string
+				max   int
+			}{
+				childPrefix + ".id":         {child.ID, 128},
+				childPrefix + ".media_type": {child.MediaType, 32},
+			}); err != nil {
+				return err
+			}
+			if err := validateURLField(childPrefix+".media_url", child.MediaURL); err != nil {
+				return err
+			}
+		}
+		if item.Insights != nil && (!validCount(item.Insights.Impressions) || !validCount(item.Insights.Reach) || !validCount(item.Insights.Saved) || !validCount(item.Insights.Engagement) || !validCount(item.Insights.VideoViews) || !validCount(item.Insights.Shares)) {
+			return fmt.Errorf("%s.insights contiene contadores fuera del rango permitido", prefix)
+		}
+	}
+	return nil
+}
+
+func maxLengths(fields map[string]struct {
+	value string
+	max   int
+}) error {
+	for name, field := range fields {
+		if utf8.RuneCountInString(field.value) > field.max {
+			return fmt.Errorf("%s supera el máximo de %d caracteres", name, field.max)
+		}
+	}
+	return nil
+}
+
+func validateURLField(name, value string) error {
+	if value == "" {
+		return nil
+	}
+	if utf8.RuneCountInString(value) > 2048 {
+		return fmt.Errorf("%s supera el máximo de 2048 caracteres", name)
+	}
+	parsed, err := url.ParseRequestURI(value)
+	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return fmt.Errorf("%s debe ser una URL http:// o https:// válida", name)
+	}
+	return nil
+}
+
+func validCount(value int) bool {
+	return value >= 0 && value <= 1_000_000_000
 }
 
 func SPAHandler(distDir string) http.HandlerFunc {
