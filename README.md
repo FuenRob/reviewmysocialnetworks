@@ -1,6 +1,6 @@
 # 📊 ReviewMySocialNetworks
 
-Plataforma web integral para **auditoría, analítica y diagnóstico de cuentas de Instagram** utilizando la **Instagram Graph API de Meta**. Desarrollada con un backend en **Go puro (utilizando exclusivamente la librería estándar `net/http`)** y un frontend moderno y reactivo en **TypeScript, React, Vite, Tailwind CSS y Chart.js**.
+Plataforma web integral para **auditoría, analítica y diagnóstico de cuentas de Instagram** utilizando la **Instagram Graph API de Meta**. Desarrollada con un backend en **Go puro (utilizando exclusivamente la librería estándar `net/http`)** y un frontend moderno y reactivo en **TypeScript, React, Vite y Tailwind CSS**.
 
 ---
 
@@ -21,7 +21,7 @@ Plataforma web integral para **auditoría, analítica y diagnóstico de cuentas 
   - Lista de **Puntos Fuertes Detectados**.
   - Lista de **Áreas de Mejora Críticas**.
   - **Plan de Acción Priorizado** (Prioridad Alta, Media, Baja) con estimación de impacto en alcance y engagement.
-- **Gráficos Interactivos**:
+- **Gráficos SVG ligeros y accesibles**:
   - Línea de tiempo de Engagement y Likes por publicación.
   - Distribución de formatos con métricas de rendimiento.
   - Distribución de actividad por día de la semana.
@@ -37,7 +37,7 @@ Plataforma web integral para **auditoría, analítica y diagnóstico de cuentas 
 ## 🛠️ Stack Tecnológico
 
 - **Backend**: Go (Go 1.22+) con **100% librería estándar `net/http`** (sin frameworks externos como Gin o Echo).
-- **Frontend**: TypeScript, React 19, Vite, Tailwind CSS v4, Lucide Icons, Chart.js, react-chartjs-2, canvas-confetti.
+- **Frontend**: TypeScript, React 19, Vite, Tailwind CSS v4, Lucide Icons y gráficos SVG nativos.
 - **API**: Meta / Instagram Graph API v20.0 (`https://graph.facebook.com/v20.0` y `https://graph.instagram.com`).
 
 ---
@@ -60,11 +60,13 @@ Copia `.env.example` a `.env` y rellena tus credenciales de Meta for Developers:
 PORT=8080
 INSTAGRAM_APP_ID=tu_app_id_aqui
 INSTAGRAM_APP_SECRET=tu_app_secret_aqui
+# Alternativa en producción: INSTAGRAM_APP_SECRET_FILE=/run/secrets/instagram_app_secret
 INSTAGRAM_REDIRECT_URI=http://localhost:8080/api/auth/callback
 FRONTEND_URL=http://localhost:8080
 TRUST_PROXY=false
 ```
 Activa `TRUST_PROXY=true` únicamente cuando el backend no sea accesible directamente y todo el tráfico atraviese un proxy inverso de confianza (por ejemplo, un túnel de Cloudflare). Así el rate limiter puede usar la IP original sin aceptar cabeceras falsificadas desde Internet.
+En contenedores o Kubernetes puedes proporcionar cualquier variable mediante un archivo usando el sufijo `_FILE`; la variable directa tiene prioridad. Esto evita copiar secretos al manifiesto o a la imagen.
 > *Nota*: También puedes configurar o cambiar el `App ID` y `App Secret` directamente desde el modal de ajustes en la interfaz web sin necesidad de editar archivos.
 
 ### 3. Compilar Frontend
@@ -102,6 +104,14 @@ Si deseas desarrollar con recarga en vivo:
 # Ejecutar toda la suite de pruebas unitarias en Go (Scoring, Analyzers, Handlers)
 go test -v ./...
 ```
+
+### Observabilidad
+
+Las peticiones generan logs JSON con `request_id`, estado, duración y bytes. Las métricas Prometheus están disponibles en `GET /api/metrics`. En producción restringe esa ruta desde el proxy o la red privada.
+
+### CDN / Cloudflare
+
+Los assets con hash incluyen cabeceras de caché inmutable compatibles con Cloudflare; las respuestas API usan `no-store`. Habilita Brotli y caché de contenido estático en el proxy, pero no crees reglas de caché para `/api/*` ni para `index.html`.
 
 ---
 

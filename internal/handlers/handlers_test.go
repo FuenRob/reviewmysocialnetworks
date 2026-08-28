@@ -87,10 +87,21 @@ func TestAnalyzeManualRejectsOversizedBody(t *testing.T) {
 	h := NewHandler(&config.Config{})
 	largeBody := strings.NewReader(`{"profile":{},"media":[],"padding":"` + strings.Repeat("x", maxJSONBody) + `"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/analyze/manual", largeBody)
+	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	h.handleAnalyzeManual(w, req)
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("expected bad request, got %d", w.Code)
+	if w.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected request entity too large, got %d", w.Code)
+	}
+}
+
+func TestAnalyzeDemoRequiresJSONContentType(t *testing.T) {
+	h := NewHandler(&config.Config{})
+	req := httptest.NewRequest(http.MethodPost, "/api/analyze/demo", strings.NewReader(`{"tier":"A"}`))
+	w := httptest.NewRecorder()
+	h.handleAnalyzeDemo(w, req)
+	if w.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("expected unsupported media type, got %d", w.Code)
 	}
 }
 
@@ -168,5 +179,52 @@ func TestClientIPTrustsForwardedHeaderOnlyWhenConfigured(t *testing.T) {
 	}
 	if got := clientIP(req, true); got != "198.51.100.5" {
 		t.Fatalf("unexpected proxied client IP %q", got)
+	}
+}
+
+func TestSecurityHeadersDoNotAllowExternalFonts(t *testing.T) {
+	handler := SecurityHeaders(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	csp := w.Header().Get("Content-Security-Policy")
+	if strings.Contains(csp, "fonts.googleapis.com") || strings.Contains(csp, "fonts.gstatic.com") {
+		t.Fatalf("CSP still allows external font providers: %s", csp)
+	}
+	if !strings.Contains(csp, "object-src 'none'") {
+		t.Fatalf("CSP does not disable plugins: %s", csp)
+	}
+	if !strings.Contains(csp, "style-src-attr 'none'") {
+		t.Fatalf("CSP still permits inline style attributes: %s", csp)
+	}
+}
+
+func TestLoggerAddsRequestIDAndMetrics(t *testing.T) {
+	before := HTTPMetricsSnapshot()
+	handler := Logger(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("ok"))
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/api/health", nil)
+	req.Header.Set("X-Request-ID", "request_test_123")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	if got := w.Header().Get("X-Request-ID"); got != "request_test_123" {
+		t.Fatalf("unexpected request ID %q", got)
+	}
+	after := HTTPMetricsSnapshot()
+	if after.Requests-before.Requests != 1 {
+		t.Fatalf("request metric was not incremented: before=%+v after=%+v", before, after)
+	}
+}
+
+func TestMetricsEndpointUsesPrometheusFormat(t *testing.T) {
+	h := NewHandler(&config.Config{})
+	req := httptest.NewRequest(http.MethodGet, "/api/metrics", nil)
+	w := httptest.NewRecorder()
+	h.handleMetrics(w, req)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "rmsn_instagram_retries_total") {
+		t.Fatalf("unexpected metrics response: status=%d body=%q", w.Code, w.Body.String())
 	}
 }

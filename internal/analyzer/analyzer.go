@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-var spanishDays = []string{
+var spanishDays = [...]string{
 	"Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado",
 }
 
@@ -17,18 +17,19 @@ func AnalyzeAccount(profile *instagram.UserProfile, media []instagram.MediaItem)
 		Profile:     *profile,
 	}
 
-	sort.Slice(media, func(i, j int) bool {
-		return media[i].Timestamp.After(media[j].Timestamp)
+	orderedMedia := append([]instagram.MediaItem(nil), media...)
+	sort.Slice(orderedMedia, func(i, j int) bool {
+		return orderedMedia[i].Timestamp.After(orderedMedia[j].Timestamp)
 	})
 
-	engagementMetrics, mediaAnalysis := calculateEngagement(profile, media)
+	engagementMetrics, mediaAnalysis := calculateEngagement(profile, orderedMedia)
 	report.EngagementMetrics = engagementMetrics
 	report.MediaAnalysis = mediaAnalysis
 
-	cadenceMetrics := calculateCadence(media)
+	cadenceMetrics := calculateCadence(orderedMedia)
 	report.CadenceMetrics = cadenceMetrics
 
-	contentMetrics := calculateContent(media, profile.FollowersCount)
+	contentMetrics := calculateContent(orderedMedia, profile.FollowersCount)
 	report.ContentMetrics = contentMetrics
 
 	growthMetrics := calculateGrowth(profile, mediaAnalysis)
@@ -57,11 +58,12 @@ func calculateEngagement(profile *instagram.UserProfile, media []instagram.Media
 
 	var totalLikes, totalComments, totalSaves int
 	var totalRate float64
-	var rates []float64
-	var analysisItems []MediaAnalysisItem
+	rates := make([]float64, 0, len(media))
+	analysisItems := make([]MediaAnalysisItem, 0, len(media))
 
 	topRate := -1.0
 	var topPostID string
+	topIndex := -1
 
 	for _, item := range media {
 		interactions := item.LikeCount + item.CommentsCount
@@ -79,6 +81,7 @@ func calculateEngagement(profile *instagram.UserProfile, media []instagram.Media
 		if rate > topRate {
 			topRate = rate
 			topPostID = item.ID
+			topIndex = len(analysisItems)
 		}
 
 		totalLikes += item.LikeCount
@@ -103,10 +106,8 @@ func calculateEngagement(profile *instagram.UserProfile, media []instagram.Media
 		})
 	}
 
-	for i := range analysisItems {
-		if analysisItems[i].ID == topPostID {
-			analysisItems[i].IsTopPerformer = true
-		}
+	if topIndex >= 0 {
+		analysisItems[topIndex].IsTopPerformer = true
 	}
 
 	n := float64(len(media))

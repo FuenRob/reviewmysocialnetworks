@@ -33,7 +33,7 @@ export const PreFooter: React.FC<Props> = ({ onOpenLegal }) => {
                 <CheckCircle2 className="w-3.5 h-3.5" /> Conexión Oficial Meta OAuth
               </span>
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[11px] font-semibold">
-                <Lock className="w-3.5 h-3.5" /> Cifrado SSL 256-bit
+                <Lock className="w-3.5 h-3.5" /> Sesión OAuth protegida
               </span>
             </div>
           </div>

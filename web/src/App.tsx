@@ -35,14 +35,6 @@ export const App: React.FC = () => {
     setGlobalError(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
-    if (newReport.overall_grade === 'A') {
-      void import('canvas-confetti').then(({ default: confetti }) => confetti({
-        particleCount: 80,
-        spread: 70,
-        origin: { y: 0.6 },
-        colors: ['#10B981', '#34D399', '#6EE7B7', '#FBBF24'],
-      }));
-    }
   };
 
   useEffect(() => {

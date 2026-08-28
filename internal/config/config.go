@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"strconv"
@@ -75,15 +76,12 @@ func (c *Config) Update(appID, appSecret, redirectURI string) {
 	defer c.mu.Unlock()
 	if appID != "" {
 		c.InstagramAppID = appID
-		_ = os.Setenv("INSTAGRAM_APP_ID", appID)
 	}
 	if appSecret != "" {
 		c.InstagramAppSecret = appSecret
-		_ = os.Setenv("INSTAGRAM_APP_SECRET", appSecret)
 	}
 	if redirectURI != "" {
 		c.InstagramRedirectURI = redirectURI
-		_ = os.Setenv("INSTAGRAM_REDIRECT_URI", redirectURI)
 	}
 }
 
@@ -128,6 +126,18 @@ func (c *Config) IsConfigured() bool {
 func getEnv(key, defaultVal string) string {
 	if val := os.Getenv(key); val != "" {
 		return val
+	}
+	if filename := strings.TrimSpace(os.Getenv(key + "_FILE")); filename != "" {
+		file, err := os.Open(filename)
+		if err == nil {
+			defer file.Close()
+			value, readErr := io.ReadAll(io.LimitReader(file, 64<<10))
+			if readErr == nil {
+				if val := strings.TrimSpace(string(value)); val != "" {
+					return val
+				}
+			}
+		}
 	}
 	return defaultVal
 }

@@ -16,7 +16,7 @@ export const ExecutiveSummaryCard: React.FC<Props> = ({ report }) => {
       weight: '35%',
       score: sub_scores.engagement_score,
       icon: Activity,
-      color: 'bg-emerald-500',
+      color: 'progress-emerald',
       textColor: 'text-emerald-400',
     },
     {
@@ -24,7 +24,7 @@ export const ExecutiveSummaryCard: React.FC<Props> = ({ report }) => {
       weight: '25%',
       score: sub_scores.consistency_score,
       icon: Clock,
-      color: 'bg-blue-500',
+      color: 'progress-blue',
       textColor: 'text-blue-400',
     },
     {
@@ -32,7 +32,7 @@ export const ExecutiveSummaryCard: React.FC<Props> = ({ report }) => {
       weight: '20%',
       score: sub_scores.content_mix_score,
       icon: Layers,
-      color: 'bg-purple-500',
+      color: 'progress-purple',
       textColor: 'text-purple-400',
     },
     {
@@ -40,7 +40,7 @@ export const ExecutiveSummaryCard: React.FC<Props> = ({ report }) => {
       weight: '20%',
       score: sub_scores.audience_health_score,
       icon: Users,
-      color: 'bg-amber-500',
+      color: 'progress-amber',
       textColor: 'text-amber-400',
     },
   ];
@@ -129,12 +129,12 @@ export const ExecutiveSummaryCard: React.FC<Props> = ({ report }) => {
                       </span>
                     </div>
 
-                    <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-700 ease-out ${item.color}`}
-                        style={{ width: `${Math.max(5, item.score)}%` }}
-                      />
-                    </div>
+                    <progress
+                      className={`score-progress ${item.color}`}
+                      value={Math.max(5, item.score)}
+                      max={100}
+                      aria-label={`${item.label}: ${item.score} de 100`}
+                    />
                     <div className="text-[10px] text-slate-500 text-right">
                       Peso: {item.weight}
                     </div>

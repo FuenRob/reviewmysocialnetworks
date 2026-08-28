@@ -1,6 +1,10 @@
 package config
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestConfigValidate(t *testing.T) {
 	tests := []struct {
@@ -21,5 +25,18 @@ func TestConfigValidate(t *testing.T) {
 				t.Fatalf("Validate() error = %v, wantErr %v", err, test.wantErr)
 			}
 		})
+	}
+}
+
+func TestGetEnvReadsSecretFile(t *testing.T) {
+	directory := t.TempDir()
+	filename := filepath.Join(directory, "app-secret")
+	if err := os.WriteFile(filename, []byte("  secret-from-file\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TEST_SECRET", "")
+	t.Setenv("TEST_SECRET_FILE", filename)
+	if got := getEnv("TEST_SECRET", "fallback"); got != "secret-from-file" {
+		t.Fatalf("getEnv() = %q, want secret from file", got)
 	}
 }

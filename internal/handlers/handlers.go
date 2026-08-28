@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
@@ -8,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
 	"os"
@@ -28,6 +30,8 @@ const (
 	authSessionCookie = "rmsn_auth_session"
 )
 
+var errUnsupportedMediaType = errors.New("content type must be application/json")
+
 type authSession struct {
 	accessToken string
 	userID      string
@@ -45,12 +49,27 @@ func NewHandler(cfg *config.Config) *Handler {
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/health", h.handleHealth)
+	mux.HandleFunc("GET /api/metrics", h.handleMetrics)
 	mux.HandleFunc("GET /api/auth/url", h.handleAuthURL)
 	mux.HandleFunc("GET /api/auth/callback", h.handleAuthCallback)
 	mux.HandleFunc("GET /api/auth/result", h.handleAuthResult)
 	mux.HandleFunc("POST /api/analyze/token", h.handleAnalyzeToken)
 	mux.HandleFunc("POST /api/analyze/demo", h.handleAnalyzeDemo)
 	mux.HandleFunc("POST /api/analyze/manual", h.handleAnalyzeManual)
+}
+
+func (h *Handler) handleMetrics(w http.ResponseWriter, r *http.Request) {
+	httpSnapshot := HTTPMetricsSnapshot()
+	instagramSnapshot := instagram.MetricsSnapshot()
+	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = fmt.Fprintf(w, "# TYPE rmsn_http_requests_total counter\nrmsn_http_requests_total %d\n", httpSnapshot.Requests)
+	_, _ = fmt.Fprintf(w, "# TYPE rmsn_http_request_errors_total counter\nrmsn_http_request_errors_total %d\n", httpSnapshot.Errors)
+	_, _ = fmt.Fprintf(w, "# TYPE rmsn_http_requests_in_flight gauge\nrmsn_http_requests_in_flight %d\n", httpSnapshot.InFlight)
+	_, _ = fmt.Fprintf(w, "# TYPE rmsn_http_request_duration_seconds_sum counter\nrmsn_http_request_duration_seconds_sum %.6f\n", httpSnapshot.DurationSeconds)
+	_, _ = fmt.Fprintf(w, "# TYPE rmsn_instagram_requests_total counter\nrmsn_instagram_requests_total %d\n", instagramSnapshot.Requests)
+	_, _ = fmt.Fprintf(w, "# TYPE rmsn_instagram_retries_total counter\nrmsn_instagram_retries_total %d\n", instagramSnapshot.Retries)
+	_, _ = fmt.Fprintf(w, "# TYPE rmsn_instagram_failures_total counter\nrmsn_instagram_failures_total %d\n", instagramSnapshot.Failures)
 }
 
 func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -173,7 +192,11 @@ func (h *Handler) handleAnalyzeToken(w http.ResponseWriter, r *http.Request) {
 		AccountID   string `json:"account_id,omitempty"`
 	}
 
-	if err := decodeJSON(w, r, &req); err != nil || strings.TrimSpace(req.AccessToken) == "" {
+	if err := decodeJSON(w, r, &req); err != nil {
+		respondDecodeError(w, err, "Solicitud de token inválida")
+		return
+	}
+	if strings.TrimSpace(req.AccessToken) == "" {
 		respondError(w, http.StatusBadRequest, "El parámetro access_token es obligatorio")
 		return
 	}
@@ -191,19 +214,30 @@ func (h *Handler) handleAnalyzeToken(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) analyzeToken(w http.ResponseWriter, r *http.Request, accessToken, accountID string) {
+	ctx, cancel := context.WithTimeout(r.Context(), 25*time.Second)
+	defer cancel()
+
 	appID, appSecret, _, _ := h.cfg.Get()
 	client := instagram.NewClient(appID, appSecret)
 	if accountID == "" {
 		accountID = "me"
 	}
-	profile, err := client.FetchProfile(r.Context(), accountID, accessToken)
+	profile, err := client.FetchProfile(ctx, accountID, accessToken)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			respondError(w, http.StatusGatewayTimeout, "Instagram tardó demasiado en responder")
+			return
+		}
 		respondError(w, http.StatusBadGateway, "No se pudo obtener el perfil de Instagram")
 		return
 	}
 
-	mediaList, err := client.FetchMediaList(r.Context(), accountID, accessToken, 50)
+	mediaList, err := client.FetchMediaList(ctx, accountID, accessToken, 50)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			respondError(w, http.StatusGatewayTimeout, "Instagram tardó demasiado en responder")
+			return
+		}
 		respondError(w, http.StatusBadGateway, "No se pudieron obtener las publicaciones de Instagram")
 		return
 	}
@@ -219,7 +253,7 @@ func (h *Handler) handleAnalyzeDemo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := decodeJSON(w, r, &req); err != nil {
-		respondError(w, http.StatusBadRequest, "Solicitud demo inválida")
+		respondDecodeError(w, err, "Solicitud demo inválida")
 		return
 	}
 	if req.Tier != "A" && req.Tier != "B" && req.Tier != "D" && req.Tier != "F" {
@@ -240,7 +274,7 @@ func (h *Handler) handleAnalyzeManual(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := decodeJSON(w, r, &req); err != nil {
-		respondError(w, http.StatusBadRequest, "Datos de perfil y media inválidos")
+		respondDecodeError(w, err, "Datos de perfil y media inválidos")
 		return
 	}
 	if len(req.Media) > maxManualPosts {
@@ -257,6 +291,10 @@ func (h *Handler) handleAnalyzeManual(w http.ResponseWriter, r *http.Request) {
 }
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) error {
+	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil || mediaType != "application/json" {
+		return errUnsupportedMediaType
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxJSONBody)
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
@@ -268,6 +306,18 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) error {
 		return errors.New("solo se permite un objeto JSON")
 	}
 	return nil
+}
+
+func respondDecodeError(w http.ResponseWriter, err error, fallback string) {
+	var maxBytesError *http.MaxBytesError
+	switch {
+	case errors.Is(err, errUnsupportedMediaType):
+		respondError(w, http.StatusUnsupportedMediaType, "Content-Type debe ser application/json")
+	case errors.As(err, &maxBytesError):
+		respondError(w, http.StatusRequestEntityTooLarge, "El cuerpo de la solicitud supera 1 MB")
+	default:
+		respondError(w, http.StatusBadRequest, fallback)
+	}
 }
 
 func randomToken(size int) (string, error) {
@@ -440,12 +490,17 @@ func SPAHandler(distDir string) http.HandlerFunc {
 
 		if errors.Is(err, os.ErrNotExist) || info.IsDir() {
 			indexPath := filepath.Join(distDir, "index.html")
+			w.Header().Set("Cache-Control", "no-cache")
 			http.ServeFile(w, r, indexPath)
 			return
 		}
 
 		if strings.HasPrefix(r.URL.Path, "/assets/") {
 			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+			w.Header().Set("CDN-Cache-Control", "public, max-age=31536000, immutable")
+			w.Header().Set("Cloudflare-CDN-Cache-Control", "public, max-age=31536000, immutable")
+		} else if r.URL.Path == "/index.html" {
+			w.Header().Set("Cache-Control", "no-cache")
 		}
 		http.ServeFile(w, r, path)
 	}

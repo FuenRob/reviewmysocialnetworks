@@ -2,14 +2,17 @@ package handlers
 
 import (
 	"compress/gzip"
+	"context"
+	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"path/filepath"
 	"reviewmysocialnetworks/internal/config"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -24,11 +27,75 @@ func Chain(h http.Handler, middlewares ...Middleware) http.Handler {
 
 func Logger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestID := validRequestID(r.Header.Get("X-Request-ID"))
+		if requestID == "" {
+			requestID, _ = randomToken(12)
+		}
+		w.Header().Set("X-Request-ID", requestID)
+		r = r.WithContext(context.WithValue(r.Context(), requestIDKey{}, requestID))
+
 		start := time.Now()
 		rw := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
+		httpMetrics.inFlight.Add(1)
 		next.ServeHTTP(rw, r)
-		log.Printf("[%s] %s %d (%v)", r.Method, r.URL.Path, rw.statusCode, time.Since(start))
+		duration := time.Since(start)
+		httpMetrics.inFlight.Add(-1)
+		httpMetrics.requests.Add(1)
+		httpMetrics.durationNanos.Add(uint64(duration))
+		if rw.statusCode >= http.StatusBadRequest {
+			httpMetrics.errors.Add(1)
+		}
+		slog.Info("http_request",
+			"request_id", requestID,
+			"method", r.Method,
+			"path", r.URL.Path,
+			"status", rw.statusCode,
+			"bytes", rw.bytesWritten,
+			"duration_ms", float64(duration.Microseconds())/1000,
+		)
 	})
+}
+
+type requestIDKey struct{}
+
+func RequestID(ctx context.Context) string {
+	value, _ := ctx.Value(requestIDKey{}).(string)
+	return value
+}
+
+func validRequestID(value string) string {
+	if len(value) < 8 || len(value) > 64 {
+		return ""
+	}
+	for _, ch := range value {
+		if (ch < 'a' || ch > 'z') && (ch < 'A' || ch > 'Z') && (ch < '0' || ch > '9') && ch != '-' && ch != '_' {
+			return ""
+		}
+	}
+	return value
+}
+
+var httpMetrics struct {
+	requests      atomic.Uint64
+	errors        atomic.Uint64
+	durationNanos atomic.Uint64
+	inFlight      atomic.Int64
+}
+
+type HTTPMetrics struct {
+	Requests        uint64
+	Errors          uint64
+	DurationSeconds float64
+	InFlight        int64
+}
+
+func HTTPMetricsSnapshot() HTTPMetrics {
+	return HTTPMetrics{
+		Requests:        httpMetrics.requests.Load(),
+		Errors:          httpMetrics.errors.Load(),
+		DurationSeconds: float64(httpMetrics.durationNanos.Load()) / float64(time.Second),
+		InFlight:        httpMetrics.inFlight.Load(),
+	}
 }
 
 func CORS(cfg *config.Config) Middleware {
@@ -64,7 +131,10 @@ func SecurityHeaders(next http.Handler) http.Handler {
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://www.instagram.com https://api.instagram.com")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; style-src-attr 'none'; font-src 'self'; img-src 'self' data: https:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://www.instagram.com https://api.instagram.com")
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			w.Header().Set("Cache-Control", "no-store")
+		}
 		if requestIsHTTPS(r) {
 			w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 		}
@@ -160,6 +230,10 @@ type gzipResponseWriter struct {
 	writer *gzip.Writer
 }
 
+func (w *gzipResponseWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
 func (w *gzipResponseWriter) WriteHeader(statusCode int) {
 	w.Header().Del("Content-Length")
 	w.ResponseWriter.WriteHeader(statusCode)
@@ -205,7 +279,7 @@ func Recovery(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if err := recover(); err != nil {
-				log.Printf("PANIC recovered in %s %s: %v", r.Method, r.URL.Path, err)
+				slog.Error("http_panic", "request_id", RequestID(r.Context()), "method", r.Method, "path", r.URL.Path, "error", fmt.Sprint(err))
 				http.Error(w, `{"error":"Internal server error"}`, http.StatusInternalServerError)
 			}
 		}()
@@ -215,10 +289,29 @@ func Recovery(next http.Handler) http.Handler {
 
 type responseWriter struct {
 	http.ResponseWriter
-	statusCode int
+	statusCode   int
+	wroteHeader  bool
+	bytesWritten int
+}
+
+func (rw *responseWriter) Write(body []byte) (int, error) {
+	if !rw.wroteHeader {
+		rw.WriteHeader(http.StatusOK)
+	}
+	written, err := rw.ResponseWriter.Write(body)
+	rw.bytesWritten += written
+	return written, err
 }
 
 func (rw *responseWriter) WriteHeader(code int) {
+	if rw.wroteHeader {
+		return
+	}
+	rw.wroteHeader = true
 	rw.statusCode = code
 	rw.ResponseWriter.WriteHeader(code)
+}
+
+func (rw *responseWriter) Unwrap() http.ResponseWriter {
+	return rw.ResponseWriter
 }

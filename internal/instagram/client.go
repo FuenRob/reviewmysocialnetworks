@@ -6,10 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -25,6 +28,18 @@ type Client struct {
 	httpClient *http.Client
 	appID      string
 	appSecret  string
+}
+
+type ClientMetrics struct {
+	Requests uint64
+	Retries  uint64
+	Failures uint64
+}
+
+var clientMetrics struct {
+	requests atomic.Uint64
+	retries  atomic.Uint64
+	failures atomic.Uint64
 }
 
 func NewClient(appID, appSecret string) *Client {
@@ -81,7 +96,7 @@ func (c *Client) ExchangeCodeForToken(ctx context.Context, code, redirectURI str
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.doRequest(ctx, req, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute token exchange request: %w", err)
 	}
@@ -93,11 +108,7 @@ func (c *Client) ExchangeCodeForToken(ctx context.Context, code, redirectURI str
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		var apiErr GraphAPIError
-		if json.Unmarshal(body, &apiErr) == nil && apiErr.Error.Message != "" {
-			return nil, fmt.Errorf("instagram error: %s (code %d)", apiErr.Error.Message, apiErr.Error.Code)
-		}
-		return nil, fmt.Errorf("token exchange failed (status %d): %s", resp.StatusCode, string(body))
+		return nil, apiResponseError("token exchange", resp.StatusCode, body)
 	}
 
 	var tokenResp TokenResponse
@@ -118,7 +129,7 @@ func (c *Client) ExchangeCodeForToken(ctx context.Context, code, redirectURI str
 		}, nil
 	}
 
-	return nil, fmt.Errorf("unrecognized token response: %s", string(body))
+	return nil, errors.New("instagram returned an unrecognized token response")
 }
 
 func (c *Client) ExchangeForLongLivedToken(ctx context.Context, shortLivedToken string) (*TokenResponse, error) {
@@ -132,7 +143,7 @@ func (c *Client) ExchangeForLongLivedToken(ctx context.Context, shortLivedToken 
 	if err != nil {
 		return nil, err
 	}
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.doRequest(ctx, req, true)
 	if err != nil {
 		return nil, fmt.Errorf("failed to call long-lived token endpoint: %w", err)
 	}
@@ -144,7 +155,7 @@ func (c *Client) ExchangeForLongLivedToken(ctx context.Context, shortLivedToken 
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("long-lived token exchange failed (status %d): %s", resp.StatusCode, string(body))
+		return nil, apiResponseError("long-lived token exchange", resp.StatusCode, body)
 	}
 
 	var tokenResp TokenResponse
@@ -202,7 +213,7 @@ func (c *Client) FetchProfile(ctx context.Context, accountID, accessToken string
 
 	var apiErr GraphAPIError
 	if json.Unmarshal(body, &apiErr) == nil && apiErr.Error.Message != "" {
-		return nil, fmt.Errorf("instagram graph api error: %s (code %d)", apiErr.Error.Message, apiErr.Error.Code)
+		return nil, apiResponseError("profile request", resp.StatusCode, body)
 	}
 
 	return nil, errors.New("no se pudo obtener el perfil de Instagram. Verifica que el token sea válido.")
@@ -269,7 +280,7 @@ func (c *Client) FetchMediaList(ctx context.Context, accountID, accessToken stri
 				items[i] = item
 			}
 
-			jobs := make(chan int)
+			jobs := make(chan int, len(items))
 			var wg sync.WaitGroup
 			workers := 6
 			if len(items) < workers {
@@ -280,6 +291,9 @@ func (c *Client) FetchMediaList(ctx context.Context, accountID, accessToken stri
 				go func() {
 					defer wg.Done()
 					for index := range jobs {
+						if ctx.Err() != nil {
+							return
+						}
 						insights, err := c.FetchMediaInsights(ctx, items[index].ID, items[index].MediaType, accessToken)
 						if err == nil {
 							items[index].Insights = insights
@@ -288,13 +302,7 @@ func (c *Client) FetchMediaList(ctx context.Context, accountID, accessToken stri
 				}()
 			}
 			for i := range items {
-				select {
-				case jobs <- i:
-				case <-ctx.Done():
-					close(jobs)
-					wg.Wait()
-					return nil, ctx.Err()
-				}
+				jobs <- i
 			}
 			close(jobs)
 			wg.Wait()
@@ -369,7 +377,79 @@ func (c *Client) getWithToken(ctx context.Context, reqURL, accessToken string) (
 		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
-	return c.httpClient.Do(req)
+	return c.doRequest(ctx, req, true)
+}
+
+func (c *Client) doRequest(ctx context.Context, req *http.Request, retryable bool) (*http.Response, error) {
+	attempts := 1
+	if retryable {
+		attempts = 3
+	}
+
+	for attempt := 0; attempt < attempts; attempt++ {
+		request := req.Clone(ctx)
+		clientMetrics.requests.Add(1)
+		resp, err := c.httpClient.Do(request)
+		shouldRetry := retryable && attempt+1 < attempts && (err != nil || isRetryableStatus(resp.StatusCode))
+		if !shouldRetry {
+			if err != nil || (resp != nil && resp.StatusCode >= http.StatusBadRequest) {
+				clientMetrics.failures.Add(1)
+			}
+			return resp, err
+		}
+
+		clientMetrics.retries.Add(1)
+		delay := retryDelay(resp, attempt)
+		if resp != nil {
+			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
+			_ = resp.Body.Close()
+		}
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			clientMetrics.failures.Add(1)
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
+	}
+	return nil, errors.New("instagram request retries exhausted")
+}
+
+func isRetryableStatus(status int) bool {
+	return status == http.StatusTooManyRequests || status == http.StatusBadGateway || status == http.StatusServiceUnavailable || status == http.StatusGatewayTimeout
+}
+
+func retryDelay(resp *http.Response, attempt int) time.Duration {
+	if resp != nil {
+		retryAfter := strings.TrimSpace(resp.Header.Get("Retry-After"))
+		if seconds, err := strconv.Atoi(retryAfter); err == nil && seconds > 0 {
+			delay := time.Duration(seconds) * time.Second
+			return cappedRetryDelay(delay)
+		}
+		if retryAt, err := http.ParseTime(retryAfter); err == nil {
+			return cappedRetryDelay(time.Until(retryAt))
+		}
+	}
+	return time.Duration(100*(1<<attempt)+rand.IntN(100)) * time.Millisecond
+}
+
+func cappedRetryDelay(delay time.Duration) time.Duration {
+	if delay <= 0 {
+		return 100 * time.Millisecond
+	}
+	if delay > 2*time.Second {
+		return 2 * time.Second
+	}
+	return delay
+}
+
+func MetricsSnapshot() ClientMetrics {
+	return ClientMetrics{
+		Requests: clientMetrics.requests.Load(),
+		Retries:  clientMetrics.retries.Load(),
+		Failures: clientMetrics.failures.Load(),
+	}
 }
 
 func readLimited(reader io.Reader) ([]byte, error) {
@@ -382,4 +462,12 @@ func readLimited(reader io.Reader) ([]byte, error) {
 		return nil, errors.New("instagram response exceeded size limit")
 	}
 	return body, nil
+}
+
+func apiResponseError(operation string, status int, body []byte) error {
+	var apiErr GraphAPIError
+	if json.Unmarshal(body, &apiErr) == nil && apiErr.Error.Code != 0 {
+		return fmt.Errorf("%s failed: instagram API code %d, subcode %d", operation, apiErr.Error.Code, apiErr.Error.ErrorSubcode)
+	}
+	return fmt.Errorf("%s failed with status %d", operation, status)
 }

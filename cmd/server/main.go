@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -15,11 +15,13 @@ import (
 )
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 	config.LoadEnvFile(".env")
 
 	cfg := config.AppConfig
 	if err := cfg.Validate(); err != nil {
-		log.Fatalf("❌ Configuración inválida: %v", err)
+		slog.Error("invalid_configuration", "error", err)
+		os.Exit(1)
 	}
 	appID, _, redirectURI, port := cfg.Get()
 
@@ -31,7 +33,7 @@ func main() {
 	webDist := filepath.Join(".", "web", "dist")
 	mux.HandleFunc("/", handlers.SPAHandler(webDist))
 
-	handler := handlers.Chain(mux, handlers.Compression, handlers.Recovery, handlers.Logger, handlers.SecurityHeaders, handlers.CORS(cfg), handlers.RateLimit(cfg))
+	handler := handlers.Chain(mux, handlers.Compression, handlers.Logger, handlers.Recovery, handlers.SecurityHeaders, handlers.CORS(cfg), handlers.RateLimit(cfg))
 
 	server := &http.Server{
 		Addr:              ":" + port,
@@ -54,7 +56,8 @@ func main() {
 		fmt.Println("================================================================")
 
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("❌ Error crítico en el servidor HTTP: %v", err)
+			slog.Error("http_server_failure", "error", err)
+			os.Exit(1)
 		}
 	}()
 
@@ -62,14 +65,14 @@ func main() {
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	<-stop
 
-	log.Println("🛑 Apagando el servidor ReviewMySocialNetworks de forma segura...")
+	slog.Info("http_server_shutdown_started")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	if err := server.Shutdown(ctx); err != nil {
-		log.Printf("⚠️ Error durante el apagado del servidor: %v", err)
+		slog.Error("http_server_shutdown_failure", "error", err)
 	} else {
-		log.Println("✅ Servidor detenido correctamente.")
+		slog.Info("http_server_shutdown_complete")
 	}
 }
 

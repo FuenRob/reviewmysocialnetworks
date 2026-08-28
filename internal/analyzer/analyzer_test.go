@@ -3,6 +3,7 @@ package analyzer
 import (
 	"reviewmysocialnetworks/internal/instagram"
 	"testing"
+	"time"
 )
 
 func TestAnalyzeAccount_Tiers(t *testing.T) {
@@ -47,6 +48,19 @@ func TestAnalyzeAccount_Tiers(t *testing.T) {
 				t.Errorf("Tier %s: expected non-empty executive summary", tt.tier)
 			}
 		})
+	}
+}
+
+func TestAnalyzeAccountDoesNotMutateMediaOrder(t *testing.T) {
+	profile := &instagram.UserProfile{FollowersCount: 100}
+	older := instagram.MediaItem{ID: "older", Timestamp: time.Now().Add(-time.Hour)}
+	newer := instagram.MediaItem{ID: "newer", Timestamp: time.Now()}
+	media := []instagram.MediaItem{older, newer}
+
+	AnalyzeAccount(profile, media)
+
+	if media[0].ID != "older" || media[1].ID != "newer" {
+		t.Fatalf("AnalyzeAccount mutated caller media order: %#v", media)
 	}
 }
 
