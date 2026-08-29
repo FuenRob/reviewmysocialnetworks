@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"math/rand/v2"
 	"net/http"
 	"net/url"
@@ -19,9 +20,9 @@ import (
 const maxAPIResponseBytes = 8 << 20
 
 const (
-	InstagramOAuthAuthorizeURL = "https://www.instagram.com/oauth/authorize"
-	InstagramTokenExchangeURL  = "https://api.instagram.com/oauth/access_token"
-	InstagramGraphAPIBaseURL   = "https://graph.instagram.com"
+	OAuthAuthorizeURL = "https://www.instagram.com/oauth/authorize"
+	TokenExchangeURL  = "https://api.instagram.com/oauth/access_token"
+	GraphAPIBaseURL   = "https://graph.instagram.com"
 )
 
 type Client struct {
@@ -66,7 +67,7 @@ func (c *Client) GetAuthorizationURL(redirectURI, state string) string {
 	params.Set("enable_fb_login", "0")
 	params.Set("force_authentication", "1")
 
-	return fmt.Sprintf("%s?%s", InstagramOAuthAuthorizeURL, params.Encode())
+	return fmt.Sprintf("%s?%s", OAuthAuthorizeURL, params.Encode())
 }
 
 func (c *Client) GetBasicAuthorizationURL(redirectURI, state string) string {
@@ -90,7 +91,7 @@ func (c *Client) ExchangeCodeForToken(ctx context.Context, code, redirectURI str
 	data.Set("redirect_uri", redirectURI)
 	data.Set("code", code)
 
-	req, err := http.NewRequestWithContext(ctx, "POST", InstagramTokenExchangeURL, strings.NewReader(data.Encode()))
+	req, err := http.NewRequestWithContext(ctx, "POST", TokenExchangeURL, strings.NewReader(data.Encode()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create token request: %w", err)
 	}
@@ -100,7 +101,12 @@ func (c *Client) ExchangeCodeForToken(ctx context.Context, code, redirectURI str
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute token exchange request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			slog.Error("failed to close response body", "error", err)
+		}
+	}(resp.Body)
 
 	body, err := readLimited(resp.Body)
 	if err != nil {
@@ -138,7 +144,7 @@ func (c *Client) ExchangeForLongLivedToken(ctx context.Context, shortLivedToken 
 	params.Set("client_secret", c.appSecret)
 	params.Set("access_token", shortLivedToken)
 
-	reqURL := fmt.Sprintf("%s/access_token?%s", InstagramGraphAPIBaseURL, params.Encode())
+	reqURL := fmt.Sprintf("%s/access_token?%s", GraphAPIBaseURL, params.Encode())
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {
 		return nil, err
@@ -147,7 +153,12 @@ func (c *Client) ExchangeForLongLivedToken(ctx context.Context, shortLivedToken 
 	if err != nil {
 		return nil, fmt.Errorf("failed to call long-lived token endpoint: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			slog.Error("failed to close response body", "error", err)
+		}
+	}(resp.Body)
 
 	body, err := readLimited(resp.Body)
 	if err != nil {
@@ -172,13 +183,18 @@ func (c *Client) FetchProfile(ctx context.Context, accountID, accessToken string
 	}
 
 	fields := "id,username,name,biography,profile_picture_url,followers_count,follows_count,media_count,website,account_type"
-	reqURL := fmt.Sprintf("%s/%s?fields=%s", InstagramGraphAPIBaseURL, accountID, fields)
+	reqURL := fmt.Sprintf("%s/%s?fields=%s", GraphAPIBaseURL, accountID, fields)
 
 	resp, err := c.getWithToken(ctx, reqURL, accessToken)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch instagram profile: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			slog.Error("failed to close response body", "error", err)
+		}
+	}(resp.Body)
 
 	body, err := readLimited(resp.Body)
 	if err != nil {
@@ -195,10 +211,15 @@ func (c *Client) FetchProfile(ctx context.Context, accountID, accessToken string
 		}
 	}
 
-	basicURL := fmt.Sprintf("%s/me?fields=id,username,account_type,media_count", InstagramGraphAPIBaseURL)
+	basicURL := fmt.Sprintf("%s/me?fields=id,username,account_type,media_count", GraphAPIBaseURL)
 	basicResp, err := c.getWithToken(ctx, basicURL, accessToken)
 	if err == nil {
-		defer basicResp.Body.Close()
+		defer func(Body io.ReadCloser) {
+			err := Body.Close()
+			if err != nil {
+				slog.Error("failed to close response body", "error", err)
+			}
+		}(basicResp.Body)
 		basicBody, _ := readLimited(basicResp.Body)
 		if basicResp.StatusCode == http.StatusOK {
 			var basicProf UserProfile
@@ -216,7 +237,7 @@ func (c *Client) FetchProfile(ctx context.Context, accountID, accessToken string
 		return nil, apiResponseError("profile request", resp.StatusCode, body)
 	}
 
-	return nil, errors.New("no se pudo obtener el perfil de Instagram. Verifica que el token sea válido.")
+	return nil, errors.New("no se pudo obtener el perfil de Instagram. Verifica que el token sea válido")
 }
 
 func (c *Client) FetchMediaList(ctx context.Context, accountID, accessToken string, limit int) ([]MediaItem, error) {
@@ -228,13 +249,18 @@ func (c *Client) FetchMediaList(ctx context.Context, accountID, accessToken stri
 	}
 
 	fields := "id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count"
-	reqURL := fmt.Sprintf("%s/%s/media?fields=%s&limit=%d", InstagramGraphAPIBaseURL, accountID, fields, limit)
+	reqURL := fmt.Sprintf("%s/%s/media?fields=%s&limit=%d", GraphAPIBaseURL, accountID, fields, limit)
 
 	resp, err := c.getWithToken(ctx, reqURL, accessToken)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch instagram media: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			slog.Error("failed to close response body", "error", err)
+		}
+	}(resp.Body)
 
 	body, err := readLimited(resp.Body)
 	if err != nil {
@@ -282,14 +308,9 @@ func (c *Client) FetchMediaList(ctx context.Context, accountID, accessToken stri
 
 			jobs := make(chan int, len(items))
 			var wg sync.WaitGroup
-			workers := 6
-			if len(items) < workers {
-				workers = len(items)
-			}
-			for i := 0; i < workers; i++ {
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
+			workers := min(len(items), 6)
+			for range workers {
+				wg.Go(func() {
 					for index := range jobs {
 						if ctx.Err() != nil {
 							return
@@ -299,7 +320,7 @@ func (c *Client) FetchMediaList(ctx context.Context, accountID, accessToken stri
 							items[index].Insights = insights
 						}
 					}
-				}()
+				})
 			}
 			for i := range items {
 				jobs <- i
@@ -319,12 +340,17 @@ func (c *Client) FetchMediaInsights(ctx context.Context, mediaID, mediaType, acc
 		metrics = "reach,saved,engagement,video_views"
 	}
 
-	reqURL := fmt.Sprintf("%s/%s/insights?metric=%s", InstagramGraphAPIBaseURL, mediaID, metrics)
+	reqURL := fmt.Sprintf("%s/%s/insights?metric=%s", GraphAPIBaseURL, mediaID, metrics)
 	resp, err := c.getWithToken(ctx, reqURL, accessToken)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			slog.Error("failed to close response body", "error", err)
+		}
+	}(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, errors.New("insights not available")

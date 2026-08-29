@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -55,7 +56,7 @@ func main() {
 		fmt.Printf("📁 Sirviendo frontend desde:   %s\n", webDist)
 		fmt.Println("================================================================")
 
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			slog.Error("http_server_failure", "error", err)
 			os.Exit(1)
 		}

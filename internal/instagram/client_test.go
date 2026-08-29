@@ -2,6 +2,7 @@ package instagram
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -30,7 +31,12 @@ func TestDoRequestRetriesTransientResponses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			t.Fatalf("failed to close response body: %v", err)
+		}
+	}(resp.Body)
 	if resp.StatusCode != http.StatusOK || attempts.Load() != 3 {
 		t.Fatalf("status=%d attempts=%d", resp.StatusCode, attempts.Load())
 	}
@@ -54,7 +60,12 @@ func TestDoRequestDoesNotRetryClientErrors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			t.Fatalf("failed to close response body: %v", err)
+		}
+	}(resp.Body)
 	if attempts.Load() != 1 {
 		t.Fatalf("client error was retried %d times", attempts.Load())
 	}

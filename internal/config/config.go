@@ -46,7 +46,12 @@ func LoadEnvFile(filename string) {
 	if err != nil {
 		return
 	}
-	defer file.Close()
+	defer func(file *os.File) {
+		err := file.Close()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to close env file: %v\n", err)
+		}
+	}(file)
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -157,7 +162,12 @@ func getEnv(key, defaultVal string) string {
 	if filename := strings.TrimSpace(os.Getenv(key + "_FILE")); filename != "" {
 		file, err := os.Open(filename)
 		if err == nil {
-			defer file.Close()
+			defer func(file *os.File) {
+				err := file.Close()
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "failed to close env file: %v\n", err)
+				}
+			}(file)
 			value, readErr := io.ReadAll(io.LimitReader(file, 64<<10))
 			if readErr == nil {
 				if val := strings.TrimSpace(string(value)); val != "" {

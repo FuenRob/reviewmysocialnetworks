@@ -29,7 +29,7 @@ func GetMockAccount(tier string) (*UserProfile, []Video) {
 	}
 	count := 8
 	items := make([]Video, 0, count)
-	for i := 0; i < count; i++ {
+	for i := range count {
 		factor := 1.0 + float64((i%3)-1)*0.12
 		created := now.Add(-time.Duration(p.ageDays+i*p.gapDays) * 24 * time.Hour)
 		items = append(items, Video{

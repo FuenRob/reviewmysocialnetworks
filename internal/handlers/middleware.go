@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"reviewmysocialnetworks/internal/config"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -19,8 +20,8 @@ import (
 type Middleware func(http.Handler) http.Handler
 
 func Chain(h http.Handler, middlewares ...Middleware) http.Handler {
-	for i := len(middlewares) - 1; i >= 0; i-- {
-		h = middlewares[i](h)
+	for _, middleware := range slices.Backward(middlewares) {
+		h = middleware(h)
 	}
 	return h
 }
@@ -220,7 +221,12 @@ func Compression(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		defer writer.Close()
+		defer func(writer *gzip.Writer) {
+			err := writer.Close()
+			if err != nil {
+				slog.Error("failed to close gzip writer", "error", err)
+			}
+		}(writer)
 		next.ServeHTTP(&gzipResponseWriter{ResponseWriter: w, writer: writer}, r)
 	})
 }
@@ -257,7 +263,7 @@ func (w *gzipResponseWriter) ReadFrom(reader io.Reader) (int64, error) {
 }
 
 func acceptsGzip(value string) bool {
-	for _, encoding := range strings.Split(value, ",") {
+	for encoding := range strings.SplitSeq(value, ",") {
 		parts := strings.Split(strings.TrimSpace(encoding), ";")
 		if strings.EqualFold(parts[0], "gzip") {
 			return len(parts) == 1 || !strings.Contains(strings.Join(parts[1:], ";"), "q=0")

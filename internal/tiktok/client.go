@@ -101,10 +101,7 @@ func (c *Client) FetchVideos(ctx context.Context, accessToken string, limit int)
 	videos := make([]Video, 0, limit)
 	var cursor int64
 	for len(videos) < limit {
-		pageSize := limit - len(videos)
-		if pageSize > 20 {
-			pageSize = 20
-		}
+		pageSize := min(limit-len(videos), 20)
 		body := struct {
 			Cursor   int64 `json:"cursor,omitempty"`
 			MaxCount int   `json:"max_count"`

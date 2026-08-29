@@ -11,7 +11,6 @@ func calculateScores(
 	cad CadenceMetrics,
 	cnt ContentMetrics,
 	gro GrowthMetrics,
-	profile *Profile,
 ) (SubScores, int, Grade, string, string) {
 	var engScore float64
 	rate := eng.AverageEngagementRate

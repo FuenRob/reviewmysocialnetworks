@@ -5,6 +5,7 @@ import (
 	"math"
 	"reviewmysocialnetworks/internal/instagram"
 	"reviewmysocialnetworks/internal/tiktok"
+	"slices"
 	"sort"
 	"time"
 )
@@ -317,7 +318,7 @@ func medianFloat(values []float64) float64 {
 	return round2(values[n/2])
 }
 func medianInt64(values []int64) float64 {
-	sort.Slice(values, func(i, j int) bool { return values[i] < values[j] })
+	slices.Sort(values)
 	n := len(values)
 	if n == 0 {
 		return 0

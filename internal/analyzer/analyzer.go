@@ -45,7 +45,7 @@ func AnalyzeAccount(profile *instagram.UserProfile, media []instagram.MediaItem)
 	growthMetrics := calculateGrowth(&report.Profile, mediaAnalysis)
 	report.GrowthMetrics = growthMetrics
 
-	subScores, overallScore, grade, title, color := calculateScores(engagementMetrics, cadenceMetrics, contentMetrics, growthMetrics, &report.Profile)
+	subScores, overallScore, grade, title, color := calculateScores(engagementMetrics, cadenceMetrics, contentMetrics, growthMetrics)
 	report.SubScores = subScores
 	report.OverallScore = overallScore
 	report.OverallGrade = grade
@@ -218,10 +218,7 @@ func calculateCadence(media []instagram.MediaItem) CadenceMetrics {
 	}
 	metrics.BestPostingHour = bestHour
 
-	metrics.DaysSinceLastPost = int(time.Since(media[0].Timestamp).Hours() / 24)
-	if metrics.DaysSinceLastPost < 0 {
-		metrics.DaysSinceLastPost = 0
-	}
+	metrics.DaysSinceLastPost = max(int(time.Since(media[0].Timestamp).Hours()/24), 0)
 
 	if len(media) >= 2 {
 		var totalGapDays float64
@@ -385,7 +382,7 @@ func calculateGrowth(profile *Profile, items []MediaAnalysisItem) GrowthMetrics 
 	if len(items) >= 4 {
 		half := len(items) / 2
 		var recentSum, olderSum float64
-		for i := 0; i < half; i++ {
+		for i := range half {
 			recentSum += items[i].EngagementRate
 		}
 		for i := half; i < len(items); i++ {
