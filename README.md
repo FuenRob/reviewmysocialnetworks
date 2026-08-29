@@ -1,6 +1,6 @@
 # 📊 ReviewMySocialNetworks
 
-Plataforma web integral para **auditoría, analítica y diagnóstico de cuentas de Instagram** utilizando la **Instagram Graph API de Meta**. Desarrollada con un backend en **Go puro (utilizando exclusivamente la librería estándar `net/http`)** y un frontend moderno y reactivo en **TypeScript, React, Vite y Tailwind CSS**.
+Plataforma web integral para **auditoría, analítica y diagnóstico de cuentas de Instagram y TikTok** utilizando las API oficiales de ambas plataformas. Desarrollada con un backend en **Go puro (utilizando exclusivamente la librería estándar `net/http`)** y un frontend moderno y reactivo en **TypeScript, React, Vite y Tailwind CSS**.
 
 ---
 
@@ -21,6 +21,11 @@ Plataforma web integral para **auditoría, analítica y diagnóstico de cuentas 
   - Lista de **Puntos Fuertes Detectados**.
   - Lista de **Áreas de Mejora Críticas**.
   - **Plan de Acción Priorizado** (Prioridad Alta, Media, Baja) con estimación de impacto en alcance y engagement.
+- **Auditoría específica de TikTok**:
+  - Conexión oficial mediante TikTok Login Kit y Display API.
+  - Visualizaciones medias y medianas, engagement por visualización, compartidos, vistas por seguidor, viralidad, duración y tendencia reciente.
+  - Los mismos niveles A/B/D/F de Instagram, manteniendo los pesos 35/25/20/20 y sustituyendo la diversidad de formatos por alcance y potencial de viralidad.
+  - Informe transparente de cobertura: la Display API no expone retención, tiempo medio de reproducción, favoritos ni fuentes de tráfico.
 - **Gráficos SVG ligeros y accesibles**:
   - Línea de tiempo de Engagement y Likes por publicación.
   - Distribución de formatos con métricas de rendimiento.
@@ -38,7 +43,7 @@ Plataforma web integral para **auditoría, analítica y diagnóstico de cuentas 
 
 - **Backend**: Go (Go 1.22+) con **100% librería estándar `net/http`** (sin frameworks externos como Gin o Echo).
 - **Frontend**: TypeScript, React 19, Vite, Tailwind CSS v4, Lucide Icons y gráficos SVG nativos.
-- **API**: Meta / Instagram Graph API v20.0 (`https://graph.facebook.com/v20.0` y `https://graph.instagram.com`).
+- **API**: Meta / Instagram Graph API y TikTok API v2 (`/v2/user/info/`, `/v2/video/list/`).
 
 ---
 
@@ -61,13 +66,18 @@ PORT=8080
 INSTAGRAM_APP_ID=tu_app_id_aqui
 INSTAGRAM_APP_SECRET=tu_app_secret_aqui
 # Alternativa en producción: INSTAGRAM_APP_SECRET_FILE=/run/secrets/instagram_app_secret
-INSTAGRAM_REDIRECT_URI=http://localhost:8080/api/auth/callback
+INSTAGRAM_REDIRECT_URI=http://localhost:8080/api/instagram/auth/callback
+TIKTOK_CLIENT_KEY=tu_client_key
+TIKTOK_CLIENT_SECRET=tu_client_secret
+TIKTOK_REDIRECT_URI=https://tu-dominio.example/api/tiktok/auth/callback
 FRONTEND_URL=http://localhost:8080
 TRUST_PROXY=false
 ```
 Activa `TRUST_PROXY=true` únicamente cuando el backend no sea accesible directamente y todo el tráfico atraviese un proxy inverso de confianza (por ejemplo, un túnel de Cloudflare). Así el rate limiter puede usar la IP original sin aceptar cabeceras falsificadas desde Internet.
 En contenedores o Kubernetes puedes proporcionar cualquier variable mediante un archivo usando el sufijo `_FILE`; la variable directa tiene prioridad. Esto evita copiar secretos al manifiesto o a la imagen.
 > *Nota*: También puedes configurar o cambiar el `App ID` y `App Secret` directamente desde el modal de ajustes en la interfaz web sin necesidad de editar archivos.
+
+Para TikTok debes añadir **Login Kit** y **Display API** en TikTok for Developers, solicitar los scopes `user.info.basic`, `user.info.profile`, `user.info.stats` y `video.list`, y registrar exactamente `TIKTOK_REDIRECT_URI`. TikTok exige que esta URI sea HTTPS, absoluta y sin parámetros ni fragmentos.
 
 ### 3. Compilar Frontend
 ```bash
@@ -121,5 +131,5 @@ Los assets con hash incluyen cabeceras de caché inmutable compatibles con Cloud
 2. Crea una aplicación y selecciona el caso de uso **Instagram Graph API** / **Inicio de sesión de Facebook para empresas**.
 3. En la sección *Configuración básica*, copia tu **Identificador de la app (App ID)** y **Clave secreta (App Secret)**.
 4. En *Inicio de sesión con Facebook > Configuración*, añade en **URI de redireccionamiento de OAuth válidos**:
-   `http://localhost:8080/api/auth/callback`
+   `http://localhost:8080/api/instagram/auth/callback`
 5. Introduce el App ID y App Secret en el panel de ReviewMySocialNetworks para iniciar sesión con 1 clic.

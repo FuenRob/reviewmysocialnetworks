@@ -35,7 +35,7 @@ export const LegalModal: React.FC<Props> = ({ isOpen, initialDoc = 'aviso-legal'
                 Información Legal y Cumplimiento Normativo
               </h3>
               <p className="text-xs text-slate-400">
-                Conforme al RGPD (UE 2016/679), LOPDGDD y Políticas de la Plataforma de Meta
+                Conforme al RGPD, LOPDGDD y políticas de las plataformas conectadas
               </p>
             </div>
           </div>
@@ -87,7 +87,7 @@ export const LegalModal: React.FC<Props> = ({ isOpen, initialDoc = 'aviso-legal'
               <section className="space-y-2">
                 <h5 className="text-sm font-bold text-slate-100">2. Finalidad de la Plataforma</h5>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  La plataforma proporciona métricas cuantitativas, análisis de interacción (engagement rate), cadencia de publicación y recomendaciones de optimización de contenido a los usuarios titulares de cuentas de Instagram que autoricen el acceso mediante el protocolo estándar de OAuth de Meta / Instagram Graph API.
+                  La plataforma proporciona métricas cuantitativas, análisis de interacción, cadencia y recomendaciones de contenido a titulares de cuentas de Instagram o TikTok que autoricen el acceso mediante OAuth y las API oficiales de Meta o TikTok.
                 </p>
               </section>
 
@@ -99,7 +99,7 @@ export const LegalModal: React.FC<Props> = ({ isOpen, initialDoc = 'aviso-legal'
                 <div className="p-3.5 rounded-2xl bg-slate-950/70 border border-slate-800 text-xs text-slate-400 flex items-start gap-2">
                   <span className="text-pink-400 shrink-0 font-bold">ℹ️</span>
                   <span>
-                    <strong>Instagram®</strong> y <strong>Meta®</strong> son marcas registradas de Meta Platforms, Inc. ReviewMySocialNetworks es una aplicación independiente y no está patrocinada, respaldada ni administrada directamente por Meta Platforms, Inc.
+                    <strong>Instagram®</strong> y <strong>Meta®</strong> son marcas de Meta Platforms, Inc.; <strong>TikTok®</strong> es una marca de ByteDance Ltd. ReviewMySocialNetworks es una aplicación independiente y no está patrocinada, respaldada ni administrada por dichas compañías.
                   </span>
                 </div>
               </section>
@@ -107,7 +107,7 @@ export const LegalModal: React.FC<Props> = ({ isOpen, initialDoc = 'aviso-legal'
               <section className="space-y-2">
                 <h5 className="text-sm font-bold text-slate-100">4. Limitación de Responsabilidad</h5>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  Las valoraciones, notas (A, B, D, F) y planes de acción ofrecidos por el algoritmo de la plataforma tienen carácter meramente orientativo y estadístico. No garantizan resultados comerciales, incremento específico de ventas ni posicionamiento algorítmico en Instagram.
+                  Las valoraciones, notas (A, B, D, F) y planes de acción tienen carácter orientativo y estadístico. No garantizan resultados comerciales ni posicionamiento algorítmico en Instagram o TikTok.
                 </p>
               </section>
             </div>
@@ -126,30 +126,30 @@ export const LegalModal: React.FC<Props> = ({ isOpen, initialDoc = 'aviso-legal'
                   En ReviewMySocialNetworks aplicamos una política estricta de <strong>Cero Almacenamiento Permanente de Credenciales</strong>:
                 </p>
                 <ul className="list-disc list-inside space-y-1.5 text-xs text-slate-400 pl-2">
-                  <li><strong>Contraseñas:</strong> Nunca solicitamos ni tenemos acceso a tu contraseña de Instagram. El login se realiza exclusivamente en los servidores seguros de Instagram (OAuth).</li>
+                  <li><strong>Contraseñas:</strong> Nunca solicitamos ni tenemos acceso a tus contraseñas. El login se realiza exclusivamente en los servidores oficiales de Instagram o TikTok mediante OAuth.</li>
                   <li><strong>Tokens de Acceso:</strong> El token de acceso temporal se utiliza en tiempo real exclusivamente durante la sesión activa para obtener las métricas de tu cuenta y generar tu informe.</li>
-                  <li><strong>Datos Consultados:</strong> Únicamente se consultan los datos estrictamente necesarios concedidos por los permisos: nombre de usuario, foto de perfil, número de seguidores, número de seguidos, lista de publicaciones recientes (fotos, carruseles, reels) y sus contadores públicos de likes, comentarios y métricas de alcance.</li>
+                  <li><strong>Datos Consultados:</strong> Se consultan únicamente los datos autorizados necesarios: perfil, seguidores, seguidos, publicaciones o vídeos recientes y contadores de likes, comentarios, compartidos, visualizaciones y alcance cuando estén disponibles.</li>
                 </ul>
               </section>
 
               <section className="space-y-2">
                 <h5 className="text-sm font-bold text-slate-100">2. Base Jurídica del Tratamiento</h5>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  La base legal para el tratamiento de tus datos es el <strong>consentimiento explícito</strong> del interesado otorgado al iniciar sesión y aceptar los permisos en la pantalla de autorización de Instagram (Artículo 6.1.a del RGPD).
+                  La base legal es el <strong>consentimiento explícito</strong> otorgado al aceptar los permisos en la pantalla de autorización de Instagram o TikTok (Artículo 6.1.a del RGPD).
                 </p>
               </section>
 
               <section className="space-y-2">
                 <h5 className="text-sm font-bold text-slate-100">3. Cesión y Transferencias Internacionales</h5>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  Tus datos nunca son vendidos, alquilados ni transferidos a terceros con fines publicitarios o comerciales. Las comunicaciones con la API de Instagram se realizan mediante conexiones cifradas SSL/TLS de 256 bits hacia la infraestructura oficial de Meta Platforms, Inc.
+                  Tus datos nunca son vendidos ni transferidos con fines publicitarios. Las comunicaciones con Instagram Graph API y TikTok API se realizan mediante conexiones cifradas hacia la infraestructura oficial de cada plataforma.
                 </p>
               </section>
 
               <section className="space-y-2">
                 <h5 className="text-sm font-bold text-slate-100">4. Tus Derechos (ARCO / RGPD)</h5>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  Puedes revocar el acceso concedido a la aplicación en cualquier momento directamente desde la configuración de tu cuenta de Instagram (<em>Configuración y actividad ➔ Permisos de sitios web ➔ Aplicaciones y sitios web</em>) o solicitar la eliminación total conforme se describe en la sección de Eliminación de Datos.
+                  Puedes revocar el acceso en cualquier momento desde la configuración de aplicaciones conectadas de Instagram o TikTok, o seguir la sección de Eliminación de Datos.
                 </p>
               </section>
             </div>
@@ -222,14 +222,14 @@ export const LegalModal: React.FC<Props> = ({ isOpen, initialDoc = 'aviso-legal'
               <section className="space-y-2">
                 <h5 className="text-sm font-bold text-slate-100">2. Uso Autorizado</h5>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  El usuario garantiza que es el titular legítimo o cuenta con la debida autorización del propietario para conectar y auditar la cuenta de Instagram vinculada. Queda prohibido el uso de la plataforma con fines fraudulentos, de scraping no autorizado o que vulneren las políticas de la plataforma de Meta.
+                  El usuario garantiza que es titular legítimo o dispone de autorización para conectar la cuenta de Instagram o TikTok. Queda prohibido el uso fraudulento, el scraping no autorizado o cualquier vulneración de las políticas de las plataformas.
                 </p>
               </section>
 
               <section className="space-y-2">
-                <h5 className="text-sm font-bold text-slate-100">3. Disponibilidad y Límites de la API de Instagram</h5>
+                <h5 className="text-sm font-bold text-slate-100">3. Disponibilidad y Límites de las API</h5>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  El servicio depende de la disponibilidad, cuotas de llamada (Rate Limits) y políticas técnicas de Instagram Graph API. ReviewMySocialNetworks no se hace responsable de interrupciones del servicio derivadas de cambios, caídas o limitaciones técnicas impuestas por Meta Platforms, Inc.
+                  El servicio depende de la disponibilidad, cuotas y políticas de Instagram Graph API y TikTok API. ReviewMySocialNetworks no responde de interrupciones o limitaciones impuestas por Meta Platforms, Inc. o TikTok.
                 </p>
               </section>
             </div>
@@ -239,13 +239,13 @@ export const LegalModal: React.FC<Props> = ({ isOpen, initialDoc = 'aviso-legal'
             <div className="space-y-5 animate-in fade-in duration-300">
               <div>
                 <h4 className="text-xl font-bold text-white mb-1">Instrucciones de Eliminación de Datos de Usuario</h4>
-                <p className="text-xs text-slate-500">Conforme a las Políticas de la Plataforma de Meta para Desarrolladores</p>
+                <p className="text-xs text-slate-500">Conforme a las políticas para desarrolladores de Meta y TikTok</p>
               </div>
 
               <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-300 flex items-start gap-2.5">
                 <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                 <div>
-                  <strong>Política de Almacenamiento Cero:</strong> ReviewMySocialNetworks procesa las métricas en memoria volátil de sesión para generar el informe y no almacena tus datos de Instagram en bases de datos permanentes.
+                  <strong>Política de Almacenamiento Cero:</strong> las métricas de Instagram y TikTok se procesan en memoria volátil y no se almacenan en bases de datos permanentes.
                 </div>
               </div>
 
@@ -261,7 +261,7 @@ export const LegalModal: React.FC<Props> = ({ isOpen, initialDoc = 'aviso-legal'
                   <li>Localiza <strong>ReviewMySocialNetworks</strong> en la pestaña de <em>"Activas"</em> y haz clic en <strong>Eliminar</strong> (Revocar acceso).</li>
                 </ol>
                 <p className="text-xs text-slate-400">
-                  Al completar este proceso, Instagram invalidará de inmediato cualquier token de acceso y la aplicación no podrá realizar ninguna consulta futura sobre tu cuenta.
+                  Para TikTok, abre <strong>Ajustes y privacidad ➔ Seguridad y permisos ➔ Permisos de aplicaciones y servicios</strong> y elimina ReviewMySocialNetworks. Al revocar el acceso en cualquiera de las plataformas, su token deja de permitir consultas futuras.
                 </p>
               </section>
             </div>

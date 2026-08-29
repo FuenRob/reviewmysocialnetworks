@@ -1,6 +1,7 @@
 import React from 'react';
 import { Shield, Lock, FileText, Cookie, Trash2, CheckCircle2 } from 'lucide-react';
 import { InstagramIcon } from './InstagramIcon';
+import { TikTokIcon } from './TikTokIcon';
 import type { LegalDocType } from './LegalModal';
 
 interface Props {
@@ -16,7 +17,7 @@ export const PreFooter: React.FC<Props> = ({ onOpenLegal }) => {
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-yellow-500 via-pink-500 to-purple-600 p-0.5 shadow-md shadow-pink-500/10">
                 <div className="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center">
-                  <InstagramIcon className="w-4 h-4 text-white" />
+                  <div className="flex items-center"><InstagramIcon className="w-4 h-4 text-white" /><TikTokIcon className="w-3.5 h-3.5 text-white -ml-1" /></div>
                 </div>
               </div>
               <span className="text-base font-black tracking-tight text-white">
@@ -25,12 +26,12 @@ export const PreFooter: React.FC<Props> = ({ onOpenLegal }) => {
             </div>
 
             <p className="text-xs text-slate-400 leading-relaxed max-w-md">
-              Plataforma de auditoría inteligente y diagnóstico de cuentas de Instagram. Analiza el rendimiento orgánico, engagement real y ritmo de publicación a través de la API oficial Graph de Meta.
+              Plataforma de auditoría inteligente para Instagram y TikTok. Analiza alcance, interacción, cadencia y oportunidades de crecimiento mediante sus API oficiales.
             </p>
 
             <div className="flex flex-wrap items-center gap-3 pt-1">
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[11px] font-semibold">
-                <CheckCircle2 className="w-3.5 h-3.5" /> Conexión Oficial Meta OAuth
+                <CheckCircle2 className="w-3.5 h-3.5" /> OAuth oficial Meta + TikTok
               </span>
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[11px] font-semibold">
                 <Lock className="w-3.5 h-3.5" /> Sesión OAuth protegida
@@ -86,7 +87,7 @@ export const PreFooter: React.FC<Props> = ({ onOpenLegal }) => {
                   className="text-slate-400 hover:text-pink-400 transition-colors flex items-center gap-2 text-left"
                 >
                   <Trash2 className="w-3.5 h-3.5 text-slate-500" />
-                  Eliminación de Datos (Meta Platform)
+                  Eliminación y Revocación de Datos
                 </button>
               </li>
             </ul>
@@ -101,7 +102,7 @@ export const PreFooter: React.FC<Props> = ({ onOpenLegal }) => {
                 <strong>Almacenamiento Cero:</strong> No guardamos tus contraseñas ni tus publicaciones en bases de datos. Los datos se procesan en memoria exclusivamente para calcular tu informe.
               </p>
               <p className="text-[10px] text-slate-500 border-t border-slate-800/80 pt-2">
-                Instagram® es una marca comercial de Meta Platforms, Inc. Este sitio web no está afiliado ni patrocinado por Meta.
+                Instagram® pertenece a Meta Platforms, Inc. y TikTok® a ByteDance Ltd. Esta herramienta es independiente y no está patrocinada por dichas compañías.
               </p>
             </div>
           </div>

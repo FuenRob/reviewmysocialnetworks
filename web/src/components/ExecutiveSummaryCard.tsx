@@ -10,9 +10,10 @@ interface Props {
 export const ExecutiveSummaryCard: React.FC<Props> = ({ report }) => {
   const { profile, sub_scores, overall_grade, overall_score, grade_title, executive_summary } = report;
 
+  const isTikTok = report.platform === 'tiktok';
   const subScoreItems = [
     {
-      label: 'Tasa de Interacción (Engagement)',
+      label: isTikTok ? 'Interacción sobre Visualizaciones' : 'Tasa de Interacción (Engagement)',
       weight: '35%',
       score: sub_scores.engagement_score,
       icon: Activity,
@@ -28,7 +29,7 @@ export const ExecutiveSummaryCard: React.FC<Props> = ({ report }) => {
       textColor: 'text-blue-400',
     },
     {
-      label: 'Estrategia y Diversidad de Formatos',
+      label: isTikTok ? 'Alcance y Potencial de Viralidad' : 'Estrategia y Diversidad de Formatos',
       weight: '20%',
       score: sub_scores.content_mix_score,
       icon: Layers,
@@ -68,24 +69,24 @@ export const ExecutiveSummaryCard: React.FC<Props> = ({ report }) => {
                 <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
                   @{profile.username}
                 </h1>
-                {profile.account_type && (
+                {(profile.is_verified || profile.account_type) && (
                   <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700">
-                    {profile.account_type}
+                    {profile.is_verified ? '✓ Cuenta verificada' : profile.account_type}
                   </span>
                 )}
               </div>
               {profile.name && (
                 <p className="text-sm font-medium text-slate-400">{profile.name}</p>
               )}
-              {profile.website && (
+              {(profile.website || profile.profile_url) && (
                 <a
-                  href={profile.website}
+                  href={profile.website || profile.profile_url}
                   target="_blank"
                   rel="noreferrer"
                   className="inline-flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
                 >
                   <ExternalLink className="w-3 h-3" />
-                  {profile.website.replace(/^https?:\/\//, '')}
+                  {(profile.website || profile.profile_url || '').replace(/^https?:\/\//, '')}
                 </a>
               )}
             </div>

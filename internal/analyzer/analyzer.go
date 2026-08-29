@@ -14,7 +14,17 @@ var spanishDays = [...]string{
 func AnalyzeAccount(profile *instagram.UserProfile, media []instagram.MediaItem) *AccountReport {
 	report := &AccountReport{
 		GeneratedAt: time.Now(),
-		Profile:     *profile,
+		Platform:    "instagram",
+		Profile: Profile{
+			ID: profile.ID, Username: profile.Username, Name: profile.Name, Biography: profile.Biography,
+			ProfilePictureURL: profile.ProfilePictureURL, FollowersCount: profile.FollowersCount,
+			FollowsCount: profile.FollowsCount, MediaCount: profile.MediaCount, Website: profile.Website,
+			AccountType: profile.AccountType,
+		},
+		DataCoverage: DataCoverage{
+			AnalyzedPosts: len(media), MaxPosts: 50,
+			Available: []string{"perfil", "seguidores", "publicaciones", "likes", "comentarios", "insights disponibles"},
+		},
 	}
 
 	orderedMedia := append([]instagram.MediaItem(nil), media...)
@@ -22,20 +32,20 @@ func AnalyzeAccount(profile *instagram.UserProfile, media []instagram.MediaItem)
 		return orderedMedia[i].Timestamp.After(orderedMedia[j].Timestamp)
 	})
 
-	engagementMetrics, mediaAnalysis := calculateEngagement(profile, orderedMedia)
+	engagementMetrics, mediaAnalysis := calculateEngagement(&report.Profile, orderedMedia)
 	report.EngagementMetrics = engagementMetrics
 	report.MediaAnalysis = mediaAnalysis
 
 	cadenceMetrics := calculateCadence(orderedMedia)
 	report.CadenceMetrics = cadenceMetrics
 
-	contentMetrics := calculateContent(orderedMedia, profile.FollowersCount)
+	contentMetrics := calculateContent(orderedMedia, report.Profile.FollowersCount)
 	report.ContentMetrics = contentMetrics
 
-	growthMetrics := calculateGrowth(profile, mediaAnalysis)
+	growthMetrics := calculateGrowth(&report.Profile, mediaAnalysis)
 	report.GrowthMetrics = growthMetrics
 
-	subScores, overallScore, grade, title, color := calculateScores(engagementMetrics, cadenceMetrics, contentMetrics, growthMetrics, profile)
+	subScores, overallScore, grade, title, color := calculateScores(engagementMetrics, cadenceMetrics, contentMetrics, growthMetrics, &report.Profile)
 	report.SubScores = subScores
 	report.OverallScore = overallScore
 	report.OverallGrade = grade
@@ -47,7 +57,7 @@ func AnalyzeAccount(profile *instagram.UserProfile, media []instagram.MediaItem)
 	return report
 }
 
-func calculateEngagement(profile *instagram.UserProfile, media []instagram.MediaItem) (EngagementMetrics, []MediaAnalysisItem) {
+func calculateEngagement(profile *Profile, media []instagram.MediaItem) (EngagementMetrics, []MediaAnalysisItem) {
 	metrics := EngagementMetrics{
 		BenchmarkComparison: "Promedio estándar del sector: 1.5% - 2.5%",
 	}
@@ -351,7 +361,7 @@ func calculateContent(media []instagram.MediaItem, followers int) ContentMetrics
 	return metrics
 }
 
-func calculateGrowth(profile *instagram.UserProfile, items []MediaAnalysisItem) GrowthMetrics {
+func calculateGrowth(profile *Profile, items []MediaAnalysisItem) GrowthMetrics {
 	metrics := GrowthMetrics{
 		RecentTrendDirection: "Estable ➜",
 	}

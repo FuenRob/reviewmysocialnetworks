@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import type { MediaAnalysisItem } from '../types/instagram';
-import { Heart, MessageCircle, ExternalLink, Video, Layers, Image as ImageIcon, Flame, Bookmark } from 'lucide-react';
+import { Heart, MessageCircle, ExternalLink, Video, Layers, Image as ImageIcon, Flame, Bookmark, Eye, Share2 } from 'lucide-react';
 
 interface Props {
   media: MediaAnalysisItem[];
+  platform: 'instagram' | 'tiktok';
 }
 
-export const MediaGrid: React.FC<Props> = ({ media }) => {
+export const MediaGrid: React.FC<Props> = ({ media, platform }) => {
   const [activeFilter, setActiveFilter] = useState<'ALL' | 'VIDEO' | 'CAROUSEL_ALBUM' | 'IMAGE'>('ALL');
 
   const filteredMedia = media.filter((item) => {
@@ -19,7 +20,7 @@ export const MediaGrid: React.FC<Props> = ({ media }) => {
       case 'VIDEO':
         return {
           icon: Video,
-          label: 'Reel / Vídeo',
+          label: platform === 'tiktok' ? 'Vídeo TikTok' : 'Reel / Vídeo',
           color: 'bg-pink-500/20 text-pink-300 border-pink-500/30',
         };
       case 'CAROUSEL_ALBUM':
@@ -50,7 +51,7 @@ export const MediaGrid: React.FC<Props> = ({ media }) => {
           </p>
         </div>
 
-        <div className="flex items-center gap-1.5 p-1 bg-slate-900 border border-slate-800 rounded-2xl w-fit">
+        {platform === 'instagram' && <div className="flex items-center gap-1.5 p-1 bg-slate-900 border border-slate-800 rounded-2xl w-fit">
           {[
             { key: 'ALL', label: 'Todos' },
             { key: 'CAROUSEL_ALBUM', label: 'Carruseles' },
@@ -69,7 +70,7 @@ export const MediaGrid: React.FC<Props> = ({ media }) => {
               {tab.label}
             </button>
           ))}
-        </div>
+        </div>}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -81,6 +82,7 @@ export const MediaGrid: React.FC<Props> = ({ media }) => {
             month: 'short',
             year: 'numeric',
           });
+          const displayedEngagement = platform === 'tiktok' ? item.view_engagement_rate || 0 : item.engagement_rate;
 
           return (
             <div
@@ -90,7 +92,7 @@ export const MediaGrid: React.FC<Props> = ({ media }) => {
               <div className="relative aspect-square w-full bg-slate-950 overflow-hidden">
                 <img
                   src={item.thumbnail_url || item.media_url || 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=600&auto=format&fit=crop&q=80'}
-                  alt={item.caption || 'Publicación de Instagram'}
+                  alt={item.caption || `Publicación de ${platform === 'tiktok' ? 'TikTok' : 'Instagram'}`}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                 />
 
@@ -114,6 +116,8 @@ export const MediaGrid: React.FC<Props> = ({ media }) => {
                       <Heart className="w-3.5 h-3.5 text-rose-400 fill-rose-400/20" />
                       {item.like_count.toLocaleString()}
                     </span>
+                    {platform === 'tiktok' && <span className="flex items-center gap-1"><Eye className="w-3.5 h-3.5 text-cyan-400" />{(item.view_count || 0).toLocaleString()}</span>}
+                    {platform === 'tiktok' && <span className="flex items-center gap-1"><Share2 className="w-3.5 h-3.5 text-purple-400" />{(item.share_count || 0).toLocaleString()}</span>}
                     <span className="flex items-center gap-1">
                       <MessageCircle className="w-3.5 h-3.5 text-blue-400 fill-blue-400/20" />
                       {item.comments_count.toLocaleString()}
@@ -127,7 +131,7 @@ export const MediaGrid: React.FC<Props> = ({ media }) => {
                   </div>
 
                   <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 font-bold text-xs">
-                    {item.engagement_rate}% eng
+                    {displayedEngagement}% eng
                   </span>
                 </div>
               </div>
@@ -135,7 +139,7 @@ export const MediaGrid: React.FC<Props> = ({ media }) => {
               <div className="p-4 space-y-3 flex-1 flex flex-col justify-between">
                 <div>
                   <span className="text-[10px] text-slate-500 block mb-1">
-                    Publicado el {dateStr}
+                    Publicado el {dateStr}{item.duration_seconds ? ` · ${item.duration_seconds}s` : ''}
                   </span>
                   <p className="text-xs text-slate-300 line-clamp-3 leading-relaxed">
                     {item.caption || '(Sin texto de pie de foto)'}
@@ -150,7 +154,7 @@ export const MediaGrid: React.FC<Props> = ({ media }) => {
                       rel="noreferrer"
                       className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-400 hover:text-indigo-300 transition-colors"
                     >
-                      <span>Ver en Instagram</span>
+                      <span>Ver en {platform === 'tiktok' ? 'TikTok' : 'Instagram'}</span>
                       <ExternalLink className="w-3 h-3" />
                     </a>
                   </div>

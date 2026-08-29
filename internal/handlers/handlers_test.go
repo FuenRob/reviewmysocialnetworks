@@ -49,7 +49,7 @@ func TestHandler_AnalyzeDemo(t *testing.T) {
 	tiers := []string{"A", "B", "D", "F"}
 	for _, tier := range tiers {
 		body, _ := json.Marshal(map[string]string{"tier": tier})
-		req := httptest.NewRequest("POST", "/api/analyze/demo", bytes.NewReader(body))
+		req := httptest.NewRequest("POST", "/api/instagram/analyze/demo", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 
@@ -70,9 +70,61 @@ func TestHandler_AnalyzeDemo(t *testing.T) {
 	}
 }
 
+func TestHandler_AnalyzeTikTokDemo(t *testing.T) {
+	h := NewHandler(config.AppConfig)
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
+	for _, tier := range []string{"A", "B", "D", "F"} {
+		body, _ := json.Marshal(map[string]string{"tier": tier})
+		req := httptest.NewRequest(http.MethodPost, "/api/tiktok/analyze/demo", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("tier %s: status %d body %s", tier, w.Code, w.Body.String())
+		}
+		var report analyzer.AccountReport
+		if err := json.Unmarshal(w.Body.Bytes(), &report); err != nil {
+			t.Fatal(err)
+		}
+		if report.Platform != "tiktok" || string(report.OverallGrade) != tier || report.TikTokMetrics == nil {
+			t.Fatalf("unexpected report: %+v", report)
+		}
+	}
+}
+
+func TestTikTokAuthURLSetsStateAndScopes(t *testing.T) {
+	cfg := &config.Config{TikTokClientKey: "key", TikTokClientSecret: "secret", TikTokRedirectURI: "https://app.example/api/tiktok/auth/callback"}
+	h := NewHandler(cfg)
+	req := httptest.NewRequest(http.MethodGet, "/api/tiktok/auth/url", nil)
+	req.Header.Set("X-Forwarded-Proto", "https")
+	w := httptest.NewRecorder()
+	h.handleTikTokAuthURL(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "video.list") || !strings.Contains(w.Body.String(), "user.info.stats") {
+		t.Fatalf("missing TikTok scopes: %s", w.Body.String())
+	}
+	cookies := w.Result().Cookies()
+	if len(cookies) != 1 || cookies[0].Name != tiktokStateCookie || !cookies[0].HttpOnly || !cookies[0].Secure {
+		t.Fatalf("unexpected OAuth cookie: %#v", cookies)
+	}
+}
+
+func TestTikTokCallbackRejectsMissingState(t *testing.T) {
+	h := NewHandler(&config.Config{})
+	req := httptest.NewRequest(http.MethodGet, "/api/tiktok/auth/callback?code=test", nil)
+	w := httptest.NewRecorder()
+	h.handleTikTokAuthCallback(w, req)
+	if w.Code != http.StatusSeeOther || !strings.Contains(w.Header().Get("Location"), "platform=tiktok") {
+		t.Fatalf("unexpected redirect: %d %s", w.Code, w.Header().Get("Location"))
+	}
+}
+
 func TestAuthCallbackRejectsMissingState(t *testing.T) {
 	h := NewHandler(&config.Config{})
-	req := httptest.NewRequest(http.MethodGet, "/api/auth/callback?code=test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/instagram/auth/callback?code=test", nil)
 	w := httptest.NewRecorder()
 	h.handleAuthCallback(w, req)
 	if w.Code != http.StatusSeeOther {
@@ -86,7 +138,7 @@ func TestAuthCallbackRejectsMissingState(t *testing.T) {
 func TestAnalyzeManualRejectsOversizedBody(t *testing.T) {
 	h := NewHandler(&config.Config{})
 	largeBody := strings.NewReader(`{"profile":{},"media":[],"padding":"` + strings.Repeat("x", maxJSONBody) + `"}`)
-	req := httptest.NewRequest(http.MethodPost, "/api/analyze/manual", largeBody)
+	req := httptest.NewRequest(http.MethodPost, "/api/instagram/analyze/manual", largeBody)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	h.handleAnalyzeManual(w, req)
@@ -97,7 +149,7 @@ func TestAnalyzeManualRejectsOversizedBody(t *testing.T) {
 
 func TestAnalyzeDemoRequiresJSONContentType(t *testing.T) {
 	h := NewHandler(&config.Config{})
-	req := httptest.NewRequest(http.MethodPost, "/api/analyze/demo", strings.NewReader(`{"tier":"A"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/instagram/analyze/demo", strings.NewReader(`{"tier":"A"}`))
 	w := httptest.NewRecorder()
 	h.handleAnalyzeDemo(w, req)
 	if w.Code != http.StatusUnsupportedMediaType {
@@ -108,7 +160,7 @@ func TestAnalyzeDemoRequiresJSONContentType(t *testing.T) {
 func TestCORSRejectsUnknownPreflightOrigin(t *testing.T) {
 	cfg := &config.Config{FrontendURL: "https://app.example"}
 	handler := CORS(cfg)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
-	req := httptest.NewRequest(http.MethodOptions, "/api/analyze/demo", nil)
+	req := httptest.NewRequest(http.MethodOptions, "/api/instagram/analyze/demo", nil)
 	req.Header.Set("Origin", "https://evil.example")
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
@@ -118,9 +170,9 @@ func TestCORSRejectsUnknownPreflightOrigin(t *testing.T) {
 }
 
 func TestAuthURLSetsPrivateSecureStateCookie(t *testing.T) {
-	cfg := &config.Config{InstagramAppID: "app", InstagramAppSecret: "secret", InstagramRedirectURI: "https://app.example/api/auth/callback"}
+	cfg := &config.Config{InstagramAppID: "app", InstagramAppSecret: "secret", InstagramRedirectURI: "https://app.example/api/instagram/auth/callback"}
 	h := NewHandler(cfg)
-	req := httptest.NewRequest(http.MethodGet, "/api/auth/url", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/instagram/auth/url", nil)
 	req.Header.Set("X-Forwarded-Proto", "https")
 	w := httptest.NewRecorder()
 	h.handleAuthURL(w, req)

@@ -24,6 +24,8 @@ export const KPIStatsGrid: React.FC<Props> = ({ report }) => {
     return `${trimmed}s`;
   };
 
+  const isTikTok = report.platform === 'tiktok';
+  const tiktok = report.tiktok_metrics;
   const kpis = [
     {
       label: 'Seguidores',
@@ -33,23 +35,23 @@ export const KPIStatsGrid: React.FC<Props> = ({ report }) => {
       color: 'from-blue-500/20 to-indigo-500/20 text-blue-400 border-blue-500/30',
     },
     {
-      label: 'Tasa de Interacción Media',
-      value: `${engagement_metrics.average_engagement_rate}%`,
+      label: isTikTok ? 'Interacción por Visualización' : 'Tasa de Interacción Media',
+      value: `${isTikTok ? engagement_metrics.view_engagement_rate || 0 : engagement_metrics.average_engagement_rate}%`,
       subtitle: engagement_metrics.benchmark_comparison,
       icon: Zap,
       color: 'from-emerald-500/20 to-teal-500/20 text-emerald-400 border-emerald-500/30',
       highlight: true,
     },
     {
-      label: 'Interacciones Promedio',
-      value: `${formatNumber(engagement_metrics.average_likes)} likes`,
-      subtitle: `${formatNumber(engagement_metrics.average_comments)} comentarios / post`,
+      label: isTikTok ? 'Visualizaciones Promedio' : 'Interacciones Promedio',
+      value: isTikTok ? formatNumber(tiktok?.average_views || 0) : `${formatNumber(engagement_metrics.average_likes)} likes`,
+      subtitle: isTikTok ? `${formatNumber(engagement_metrics.average_likes)} likes · ${formatNumber(engagement_metrics.average_shares || 0)} compartidos` : `${formatNumber(engagement_metrics.average_comments)} comentarios / post`,
       icon: Heart,
       color: 'from-rose-500/20 to-pink-500/20 text-rose-400 border-rose-500/30',
     },
     {
       label: 'Frecuencia de Publicación',
-      value: `~${cadence_metrics.estimated_posts_per_week} posts/sem`,
+      value: `~${cadence_metrics.estimated_posts_per_week} ${isTikTok ? 'vídeos' : 'posts'}/sem`,
       subtitle: cadence_metrics.cadence_status,
       icon: Calendar,
       color: 'from-purple-500/20 to-violet-500/20 text-purple-400 border-purple-500/30',
@@ -62,9 +64,9 @@ export const KPIStatsGrid: React.FC<Props> = ({ report }) => {
       color: 'from-amber-500/20 to-orange-500/20 text-amber-400 border-amber-500/30',
     },
     {
-      label: 'Ratio de Audiencia',
-      value: `${growth_metrics.follower_to_following_ratio}:1`,
-      subtitle: growth_metrics.audience_health_status,
+      label: isTikTok ? 'Alcance sobre Seguidores' : 'Ratio de Audiencia',
+      value: isTikTok ? `${tiktok?.views_per_follower || 0}x` : `${growth_metrics.follower_to_following_ratio}:1`,
+      subtitle: isTikTok ? `${tiktok?.viral_videos_count || 0} vídeos superaron 1,5x la base de seguidores` : growth_metrics.audience_health_status,
       icon: Award,
       color: 'from-cyan-500/20 to-sky-500/20 text-cyan-400 border-cyan-500/30',
     },

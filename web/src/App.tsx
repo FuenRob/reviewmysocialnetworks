@@ -1,5 +1,5 @@
 import React, { lazy, Suspense, useState, useEffect, useRef } from 'react';
-import { getAuthResult, analyzeDemo } from './api/client';
+import { getAuthResult, getTikTokAuthResult, analyzeDemo, analyzeTikTokDemo } from './api/client';
 import type { AccountReport } from './types/instagram';
 import { Navbar } from './components/Navbar';
 import { HeroConnect } from './components/HeroConnect';
@@ -16,10 +16,11 @@ const EngagementCharts = lazy(() => import('./components/EngagementCharts').then
 export const App: React.FC = () => {
   const authResultRequested = useRef(false);
   const [report, setReport] = useState<AccountReport | null>(null);
-  const [loading, setLoading] = useState(() => window.location.hash === '#auth_success');
+  const [loading, setLoading] = useState(() => window.location.hash === '#auth_success' || window.location.hash === '#tiktok_auth_success');
   const [globalError, setGlobalError] = useState<string | null>(() => {
     const error = new URLSearchParams(window.location.search).get('error');
-    return error ? `Error en autenticación de Instagram: ${error}` : null;
+    const platform = new URLSearchParams(window.location.search).get('platform');
+    return error ? `Error en autenticación de ${platform === 'tiktok' ? 'TikTok' : 'Instagram'}: ${error}` : null;
   });
 
   const [isLegalOpen, setIsLegalOpen] = useState(false);
@@ -41,15 +42,17 @@ export const App: React.FC = () => {
     const searchParams = new URLSearchParams(window.location.search);
     const error = searchParams.get('error');
     const authSuccess = window.location.hash === '#auth_success';
+    const tiktokAuthSuccess = window.location.hash === '#tiktok_auth_success';
 
     if (error) {
       window.history.replaceState({}, document.title, window.location.pathname);
-    } else if (authSuccess) {
+    } else if (authSuccess || tiktokAuthSuccess) {
       if (authResultRequested.current) return;
       authResultRequested.current = true;
       setLoading(true);
       window.history.replaceState({}, document.title, window.location.pathname);
-      getAuthResult()
+      const resultPromise = tiktokAuthSuccess ? getTikTokAuthResult() : getAuthResult();
+      resultPromise
         .then((res) => {
           handleSetReport(res);
         })
@@ -60,11 +63,11 @@ export const App: React.FC = () => {
     }
   }, []);
 
-  const handleLoadDemo = async (tier: 'A' | 'B' | 'D' | 'F') => {
+  const handleLoadDemo = async (tier: 'A' | 'B' | 'D' | 'F', platform: 'instagram' | 'tiktok' = report?.platform || 'instagram') => {
     setLoading(true);
     setGlobalError(null);
     try {
-      const demoReport = await analyzeDemo(tier);
+      const demoReport = platform === 'tiktok' ? await analyzeTikTokDemo(tier) : await analyzeDemo(tier);
       handleSetReport(demoReport);
     } catch (err: any) {
       setGlobalError(err.message || 'Error al cargar la cuenta demo');
@@ -103,7 +106,7 @@ export const App: React.FC = () => {
           <div className="flex flex-col items-center justify-center py-28 space-y-4">
             <div className="w-12 h-12 border-4 border-pink-500 border-t-transparent rounded-full animate-spin" />
             <p className="text-sm font-semibold text-slate-300">
-              Extrayendo métricas de Instagram Graph API y calculando calificación...
+              Extrayendo métricas oficiales y calculando la calificación...
             </p>
           </div>
         ) : report ? (
@@ -114,7 +117,7 @@ export const App: React.FC = () => {
               <EngagementCharts report={report} />
             </Suspense>
             <ReportActionPlan report={report} />
-            <MediaGrid media={report.media_analysis} />
+            <MediaGrid media={report.media_analysis} platform={report.platform} />
 
             <div className="flex justify-center pt-6 no-print">
               <button

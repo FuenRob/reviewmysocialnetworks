@@ -12,10 +12,14 @@ func TestConfigValidate(t *testing.T) {
 		config  *Config
 		wantErr bool
 	}{
-		{name: "valid", config: &Config{Port: "8080", InstagramRedirectURI: "https://app.example/api/auth/callback", FrontendURL: "https://app.example"}},
+		{name: "valid", config: &Config{Port: "8080", InstagramRedirectURI: "https://app.example/api/instagram/auth/callback", FrontendURL: "https://app.example"}},
 		{name: "invalid port", config: &Config{Port: "70000", InstagramRedirectURI: "https://app.example/callback", FrontendURL: "https://app.example"}, wantErr: true},
 		{name: "invalid redirect", config: &Config{Port: "8080", InstagramRedirectURI: "javascript:alert(1)", FrontendURL: "https://app.example"}, wantErr: true},
 		{name: "invalid frontend", config: &Config{Port: "8080", InstagramRedirectURI: "https://app.example/callback", FrontendURL: "//app.example"}, wantErr: true},
+		{name: "valid tiktok", config: &Config{Port: "8080", InstagramRedirectURI: "https://app.example/callback", TikTokRedirectURI: "https://app.example/api/tiktok/auth/callback", FrontendURL: "https://app.example"}},
+		{name: "tiktok requires https", config: &Config{Port: "8080", InstagramRedirectURI: "https://app.example/callback", TikTokRedirectURI: "http://app.example/api/tiktok/auth/callback", FrontendURL: "https://app.example"}, wantErr: true},
+		{name: "tiktok rejects query", config: &Config{Port: "8080", InstagramRedirectURI: "https://app.example/callback", TikTokRedirectURI: "https://app.example/api/tiktok/auth/callback?source=test", FrontendURL: "https://app.example"}, wantErr: true},
+		{name: "tiktok rejects fragment", config: &Config{Port: "8080", InstagramRedirectURI: "https://app.example/callback", TikTokRedirectURI: "https://app.example/api/tiktok/auth/callback#done", FrontendURL: "https://app.example"}, wantErr: true},
 	}
 
 	for _, test := range tests {

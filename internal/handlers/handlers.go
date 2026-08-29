@@ -24,10 +24,12 @@ import (
 )
 
 const (
-	maxJSONBody       = 1 << 20
-	maxManualPosts    = 100
-	oauthStateCookie  = "rmsn_oauth_state"
-	authSessionCookie = "rmsn_auth_session"
+	maxJSONBody         = 1 << 20
+	maxManualPosts      = 100
+	oauthStateCookie    = "rmsn_oauth_state"
+	authSessionCookie   = "rmsn_auth_session"
+	tiktokStateCookie   = "rmsn_tiktok_oauth_state"
+	tiktokSessionCookie = "rmsn_tiktok_auth_session"
 )
 
 var errUnsupportedMediaType = errors.New("content type must be application/json")
@@ -50,12 +52,17 @@ func NewHandler(cfg *config.Config) *Handler {
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/health", h.handleHealth)
 	mux.HandleFunc("GET /api/metrics", h.handleMetrics)
-	mux.HandleFunc("GET /api/auth/url", h.handleAuthURL)
-	mux.HandleFunc("GET /api/auth/callback", h.handleAuthCallback)
-	mux.HandleFunc("GET /api/auth/result", h.handleAuthResult)
-	mux.HandleFunc("POST /api/analyze/token", h.handleAnalyzeToken)
-	mux.HandleFunc("POST /api/analyze/demo", h.handleAnalyzeDemo)
-	mux.HandleFunc("POST /api/analyze/manual", h.handleAnalyzeManual)
+	mux.HandleFunc("GET /api/instagram/auth/url", h.handleAuthURL)
+	mux.HandleFunc("GET /api/instagram/auth/callback", h.handleAuthCallback)
+	mux.HandleFunc("GET /api/instagram/auth/result", h.handleAuthResult)
+	mux.HandleFunc("POST /api/instagram/analyze/token", h.handleAnalyzeToken)
+	mux.HandleFunc("POST /api/instagram/analyze/demo", h.handleAnalyzeDemo)
+	mux.HandleFunc("POST /api/instagram/analyze/manual", h.handleAnalyzeManual)
+	mux.HandleFunc("GET /api/tiktok/auth/url", h.handleTikTokAuthURL)
+	mux.HandleFunc("GET /api/tiktok/auth/callback", h.handleTikTokAuthCallback)
+	mux.HandleFunc("GET /api/tiktok/auth/result", h.handleTikTokAuthResult)
+	mux.HandleFunc("POST /api/tiktok/analyze/token", h.handleTikTokAnalyzeToken)
+	mux.HandleFunc("POST /api/tiktok/analyze/demo", h.handleTikTokAnalyzeDemo)
 }
 
 func (h *Handler) handleMetrics(w http.ResponseWriter, r *http.Request) {
@@ -77,7 +84,7 @@ func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"status":    "healthy",
 		"timestamp": time.Now().Format(time.RFC3339),
 		"version":   "1.0.0",
-		"service":   "ReviewMySocialNetworks API (Instagram Direct)",
+		"service":   "ReviewMySocialNetworks API (Instagram + TikTok)",
 	})
 }
 
@@ -329,11 +336,11 @@ func randomToken(size int) (string, error) {
 }
 
 func setPrivateCookie(w http.ResponseWriter, r *http.Request, name, value string, ttl time.Duration) {
-	http.SetCookie(w, &http.Cookie{Name: name, Value: value, Path: "/api/auth", HttpOnly: true, Secure: requestIsHTTPS(r), SameSite: http.SameSiteLaxMode, MaxAge: int(ttl.Seconds())})
+	http.SetCookie(w, &http.Cookie{Name: name, Value: value, Path: "/api", HttpOnly: true, Secure: requestIsHTTPS(r), SameSite: http.SameSiteLaxMode, MaxAge: int(ttl.Seconds())})
 }
 
 func clearCookie(w http.ResponseWriter, r *http.Request, name string) {
-	http.SetCookie(w, &http.Cookie{Name: name, Path: "/api/auth", HttpOnly: true, Secure: requestIsHTTPS(r), SameSite: http.SameSiteLaxMode, MaxAge: -1})
+	http.SetCookie(w, &http.Cookie{Name: name, Path: "/api", HttpOnly: true, Secure: requestIsHTTPS(r), SameSite: http.SameSiteLaxMode, MaxAge: -1})
 }
 
 func requestIsHTTPS(r *http.Request) bool {

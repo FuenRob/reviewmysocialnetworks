@@ -47,7 +47,7 @@ func main() {
 
 	go func() {
 		fmt.Println("================================================================")
-		fmt.Println("🚀 ReviewMySocialNetworks - Instagram Analytics & Audit Platform")
+		fmt.Println("🚀 ReviewMySocialNetworks - Instagram & TikTok Audit Platform")
 		fmt.Println("================================================================")
 		fmt.Printf("📡 Servidor HTTP Go iniciado en: http://localhost:%s\n", port)
 		fmt.Printf("📷 Instagram App ID:           %s\n", maskString(appID))

@@ -1,6 +1,6 @@
 import React from 'react';
 import type { AccountReport, Recommendation } from '../types/instagram';
-import { CheckCircle2, AlertTriangle, ArrowUpRight, Target, ShieldCheck, Flame } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, ArrowUpRight, Target, ShieldCheck, Flame, Database } from 'lucide-react';
 
 interface Props {
   report: AccountReport;
@@ -23,6 +23,16 @@ export const ReportActionPlan: React.FC<Props> = ({ report }) => {
 
   return (
     <div className="space-y-8">
+      {report.platform === 'tiktok' && (
+        <div className="bg-cyan-950/20 border border-cyan-500/20 rounded-3xl p-5 flex flex-col sm:flex-row gap-4">
+          <Database className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
+          <div className="space-y-2">
+            <h3 className="text-sm font-bold text-white">Cobertura del análisis oficial</h3>
+            <p className="text-xs text-slate-300">Se analizaron {report.data_coverage.analyzed_posts} de hasta {report.data_coverage.max_posts} vídeos recientes: {report.data_coverage.available.join(', ')}.</p>
+            {report.data_coverage.unavailable?.length ? <p className="text-[11px] text-slate-500">TikTok Display API no facilita: {report.data_coverage.unavailable.join(', ')}. El informe no estima estos datos para evitar conclusiones engañosas.</p> : null}
+          </div>
+        </div>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 backdrop-blur-xl">
           <div className="flex items-center gap-3 mb-5">

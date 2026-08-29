@@ -18,6 +18,9 @@ type Config struct {
 	InstagramAppID       string `json:"instagram_app_id"`
 	InstagramAppSecret   string `json:"instagram_app_secret"`
 	InstagramRedirectURI string `json:"instagram_redirect_uri"`
+	TikTokClientKey      string `json:"tiktok_client_key"`
+	TikTokClientSecret   string `json:"tiktok_client_secret"`
+	TikTokRedirectURI    string `json:"tiktok_redirect_uri"`
 	FrontendURL          string `json:"frontend_url"`
 	TrustProxy           bool   `json:"trust_proxy"`
 }
@@ -29,7 +32,10 @@ func init() {
 		Port:                 getEnv("PORT", "8080"),
 		InstagramAppID:       getEnv("INSTAGRAM_APP_ID", ""),
 		InstagramAppSecret:   getEnv("INSTAGRAM_APP_SECRET", ""),
-		InstagramRedirectURI: getEnv("INSTAGRAM_REDIRECT_URI", "http://localhost:8080/api/auth/callback"),
+		InstagramRedirectURI: getEnv("INSTAGRAM_REDIRECT_URI", "http://localhost:8080/api/instagram/auth/callback"),
+		TikTokClientKey:      getEnv("TIKTOK_CLIENT_KEY", ""),
+		TikTokClientSecret:   getEnv("TIKTOK_CLIENT_SECRET", ""),
+		TikTokRedirectURI:    getEnv("TIKTOK_REDIRECT_URI", ""),
 		FrontendURL:          getEnv("FRONTEND_URL", "http://localhost:8080"),
 		TrustProxy:           getEnvBool("TRUST_PROXY", false),
 	}
@@ -65,6 +71,9 @@ func LoadEnvFile(filename string) {
 		getEnv("INSTAGRAM_REDIRECT_URI", AppConfig.InstagramRedirectURI),
 	)
 	AppConfig.mu.Lock()
+	AppConfig.TikTokClientKey = getEnv("TIKTOK_CLIENT_KEY", AppConfig.TikTokClientKey)
+	AppConfig.TikTokClientSecret = getEnv("TIKTOK_CLIENT_SECRET", AppConfig.TikTokClientSecret)
+	AppConfig.TikTokRedirectURI = getEnv("TIKTOK_REDIRECT_URI", AppConfig.TikTokRedirectURI)
 	AppConfig.Port = getEnv("PORT", AppConfig.Port)
 	AppConfig.FrontendURL = getEnv("FRONTEND_URL", AppConfig.FrontendURL)
 	AppConfig.TrustProxy = getEnvBool("TRUST_PROXY", AppConfig.TrustProxy)
@@ -97,6 +106,12 @@ func (c *Config) GetFrontendURL() string {
 	return c.FrontendURL
 }
 
+func (c *Config) GetTikTok() (clientKey, clientSecret, redirectURI string) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.TikTokClientKey, c.TikTokClientSecret, c.TikTokRedirectURI
+}
+
 func (c *Config) IsTrustedProxy() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -113,6 +128,18 @@ func (c *Config) Validate() error {
 	}
 	if err := validateHTTPURL("INSTAGRAM_REDIRECT_URI", c.InstagramRedirectURI); err != nil {
 		return err
+	}
+	if c.TikTokRedirectURI != "" {
+		if err := validateHTTPURL("TIKTOK_REDIRECT_URI", c.TikTokRedirectURI); err != nil {
+			return err
+		}
+		if !strings.HasPrefix(c.TikTokRedirectURI, "https://") {
+			return errors.New("TIKTOK_REDIRECT_URI debe usar https://")
+		}
+		parsed, _ := url.Parse(c.TikTokRedirectURI)
+		if parsed.RawQuery != "" || parsed.Fragment != "" {
+			return errors.New("TIKTOK_REDIRECT_URI no puede contener parámetros ni fragmentos")
+		}
 	}
 	return validateHTTPURL("FRONTEND_URL", c.FrontendURL)
 }

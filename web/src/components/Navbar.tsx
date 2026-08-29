@@ -6,7 +6,7 @@ import type { AccountReport } from '../types/instagram';
 interface Props {
   onReset: () => void;
   report: AccountReport | null;
-  onLoadDemo: (tier: 'A' | 'B' | 'D' | 'F') => void;
+  onLoadDemo: (tier: 'A' | 'B' | 'D' | 'F', platform?: 'instagram' | 'tiktok') => void;
 }
 
 export const Navbar: React.FC<Props> = ({
@@ -35,7 +35,7 @@ export const Navbar: React.FC<Props> = ({
               ReviewMy<span className="bg-gradient-to-r from-pink-500 to-purple-400 bg-clip-text text-transparent">SocialNetworks</span>
             </span>
             <span className="text-[10px] text-slate-400 block -mt-1 font-medium">
-              Instagram Graph API Audit Engine
+              Instagram + TikTok Audit Engine
             </span>
           </div>
         </div>
@@ -47,7 +47,7 @@ export const Navbar: React.FC<Props> = ({
               {(['A', 'B', 'D', 'F'] as const).map((tier) => (
                 <button
                   key={tier}
-                  onClick={() => onLoadDemo(tier)}
+                  onClick={() => onLoadDemo(tier, report.platform)}
                   className={`w-6 h-6 rounded-xl text-xs font-black transition-all ${
                     report.overall_grade === tier
                       ? 'bg-indigo-600 text-white shadow-sm'

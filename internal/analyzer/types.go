@@ -15,22 +15,41 @@ const (
 )
 
 type AccountReport struct {
-	GeneratedAt       time.Time              `json:"generated_at"`
-	Profile           instagram.UserProfile  `json:"profile"`
-	OverallGrade      Grade                  `json:"overall_grade"`
-	OverallScore      int                    `json:"overall_score"`
-	GradeTitle        string                 `json:"grade_title"`
-	GradeColor        string                 `json:"grade_color"`
-	ExecutiveSummary  string                 `json:"executive_summary"`
-	SubScores         SubScores              `json:"sub_scores"`
-	EngagementMetrics EngagementMetrics      `json:"engagement_metrics"`
-	CadenceMetrics    CadenceMetrics         `json:"cadence_metrics"`
-	ContentMetrics    ContentMetrics         `json:"content_metrics"`
-	GrowthMetrics     GrowthMetrics          `json:"growth_metrics"`
-	Strengths         []string               `json:"strengths"`
-	Weaknesses        []string               `json:"weaknesses"`
-	Recommendations   []Recommendation       `json:"recommendations"`
-	MediaAnalysis     []MediaAnalysisItem    `json:"media_analysis"`
+	GeneratedAt       time.Time           `json:"generated_at"`
+	Platform          string              `json:"platform"`
+	Profile           Profile             `json:"profile"`
+	OverallGrade      Grade               `json:"overall_grade"`
+	OverallScore      int                 `json:"overall_score"`
+	GradeTitle        string              `json:"grade_title"`
+	GradeColor        string              `json:"grade_color"`
+	ExecutiveSummary  string              `json:"executive_summary"`
+	SubScores         SubScores           `json:"sub_scores"`
+	EngagementMetrics EngagementMetrics   `json:"engagement_metrics"`
+	CadenceMetrics    CadenceMetrics      `json:"cadence_metrics"`
+	ContentMetrics    ContentMetrics      `json:"content_metrics"`
+	GrowthMetrics     GrowthMetrics       `json:"growth_metrics"`
+	Strengths         []string            `json:"strengths"`
+	Weaknesses        []string            `json:"weaknesses"`
+	Recommendations   []Recommendation    `json:"recommendations"`
+	MediaAnalysis     []MediaAnalysisItem `json:"media_analysis"`
+	TikTokMetrics     *TikTokMetrics      `json:"tiktok_metrics,omitempty"`
+	DataCoverage      DataCoverage        `json:"data_coverage"`
+}
+
+type Profile struct {
+	ID                string `json:"id"`
+	Username          string `json:"username"`
+	Name              string `json:"name,omitempty"`
+	Biography         string `json:"biography,omitempty"`
+	ProfilePictureURL string `json:"profile_picture_url,omitempty"`
+	FollowersCount    int    `json:"followers_count"`
+	FollowsCount      int    `json:"follows_count"`
+	MediaCount        int    `json:"media_count"`
+	Website           string `json:"website,omitempty"`
+	AccountType       string `json:"account_type,omitempty"`
+	LikesCount        int    `json:"likes_count,omitempty"`
+	IsVerified        bool   `json:"is_verified,omitempty"`
+	ProfileURL        string `json:"profile_url,omitempty"`
 }
 
 type SubScores struct {
@@ -51,6 +70,31 @@ type EngagementMetrics struct {
 	TopEngagingPostID     string  `json:"top_engaging_post_id"`
 	TopEngagementRate     float64 `json:"top_engagement_rate"`
 	BenchmarkComparison   string  `json:"benchmark_comparison"`
+	AverageShares         float64 `json:"average_shares,omitempty"`
+	AverageViews          float64 `json:"average_views,omitempty"`
+	ViewEngagementRate    float64 `json:"view_engagement_rate,omitempty"`
+}
+
+type TikTokMetrics struct {
+	TotalViews             int64   `json:"total_views"`
+	AverageViews           float64 `json:"average_views"`
+	MedianViews            float64 `json:"median_views"`
+	MedianViewEngagement   float64 `json:"median_view_engagement"`
+	TotalShares            int     `json:"total_shares"`
+	AverageShares          float64 `json:"average_shares"`
+	ShareRate              float64 `json:"share_rate"`
+	ViewsPerFollower       float64 `json:"views_per_follower"`
+	AverageDurationSeconds float64 `json:"average_duration_seconds"`
+	ViralVideosCount       int     `json:"viral_videos_count"`
+	TopVideoID             string  `json:"top_video_id"`
+	TopViewCount           int64   `json:"top_view_count"`
+}
+
+type DataCoverage struct {
+	AnalyzedPosts int      `json:"analyzed_posts"`
+	MaxPosts      int      `json:"max_posts"`
+	Available     []string `json:"available"`
+	Unavailable   []string `json:"unavailable,omitempty"`
 }
 
 type CadenceMetrics struct {
@@ -101,17 +145,22 @@ type Recommendation struct {
 }
 
 type MediaAnalysisItem struct {
-	ID               string                   `json:"id"`
-	Caption          string                   `json:"caption"`
-	MediaType        string                   `json:"media_type"`
-	MediaProductType string                   `json:"media_product_type"`
-	MediaURL         string                   `json:"media_url"`
-	ThumbnailURL     string                   `json:"thumbnail_url"`
-	Permalink        string                   `json:"permalink"`
-	Timestamp        time.Time                `json:"timestamp"`
-	LikeCount        int                      `json:"like_count"`
-	CommentsCount    int                      `json:"comments_count"`
-	EngagementRate   float64                  `json:"engagement_rate"`
-	Insights         *instagram.MediaInsights `json:"insights,omitempty"`
-	IsTopPerformer   bool                     `json:"is_top_performer"`
+	ID                 string                   `json:"id"`
+	Caption            string                   `json:"caption"`
+	MediaType          string                   `json:"media_type"`
+	MediaProductType   string                   `json:"media_product_type"`
+	MediaURL           string                   `json:"media_url"`
+	ThumbnailURL       string                   `json:"thumbnail_url"`
+	Permalink          string                   `json:"permalink"`
+	Timestamp          time.Time                `json:"timestamp"`
+	LikeCount          int                      `json:"like_count"`
+	CommentsCount      int                      `json:"comments_count"`
+	EngagementRate     float64                  `json:"engagement_rate"`
+	ViewEngagementRate float64                  `json:"view_engagement_rate,omitempty"`
+	Insights           *instagram.MediaInsights `json:"insights,omitempty"`
+	IsTopPerformer     bool                     `json:"is_top_performer"`
+	ViewCount          int64                    `json:"view_count,omitempty"`
+	ShareCount         int                      `json:"share_count,omitempty"`
+	DurationSeconds    int                      `json:"duration_seconds,omitempty"`
+	IsAIGC             bool                     `json:"is_aigc,omitempty"`
 }

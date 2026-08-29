@@ -3,7 +3,6 @@ package analyzer
 import (
 	"fmt"
 	"math"
-	"reviewmysocialnetworks/internal/instagram"
 	"strings"
 )
 
@@ -12,18 +11,18 @@ func calculateScores(
 	cad CadenceMetrics,
 	cnt ContentMetrics,
 	gro GrowthMetrics,
-	profile *instagram.UserProfile,
+	profile *Profile,
 ) (SubScores, int, Grade, string, string) {
 	var engScore float64
 	rate := eng.AverageEngagementRate
 	if rate >= 5.0 {
 		engScore = 95.0 + math.Min(5.0, (rate-5.0)*2.0)
 	} else if rate >= 3.0 {
-		engScore = 85.0 + ((rate - 3.0) / 2.0) * 10.0
+		engScore = 85.0 + ((rate-3.0)/2.0)*10.0
 	} else if rate >= 1.8 {
-		engScore = 70.0 + ((rate - 1.8) / 1.2) * 15.0
+		engScore = 70.0 + ((rate-1.8)/1.2)*15.0
 	} else if rate >= 0.8 {
-		engScore = 50.0 + ((rate - 0.8) / 1.0) * 20.0
+		engScore = 50.0 + ((rate-0.8)/1.0)*20.0
 	} else {
 		engScore = math.Max(10.0, rate*60.0)
 	}

@@ -11,6 +11,9 @@ export interface UserProfile {
   media_count: number;
   website?: string;
   account_type?: string;
+  likes_count?: number;
+  is_verified?: boolean;
+  profile_url?: string;
 }
 
 export interface MediaInsights {
@@ -34,8 +37,13 @@ export interface MediaAnalysisItem {
   like_count: number;
   comments_count: number;
   engagement_rate: number;
+  view_engagement_rate?: number;
   insights?: MediaInsights;
   is_top_performer?: boolean;
+  view_count?: number;
+  share_count?: number;
+  duration_seconds?: number;
+  is_aigc?: boolean;
 }
 
 export interface SubScores {
@@ -56,6 +64,31 @@ export interface EngagementMetrics {
   top_engaging_post_id: string;
   top_engagement_rate: number;
   benchmark_comparison: string;
+  average_shares?: number;
+  average_views?: number;
+  view_engagement_rate?: number;
+}
+
+export interface TikTokMetrics {
+  total_views: number;
+  average_views: number;
+  median_views: number;
+  median_view_engagement: number;
+  total_shares: number;
+  average_shares: number;
+  share_rate: number;
+  views_per_follower: number;
+  average_duration_seconds: number;
+  viral_videos_count: number;
+  top_video_id: string;
+  top_view_count: number;
+}
+
+export interface DataCoverage {
+  analyzed_posts: number;
+  max_posts: number;
+  available: string[];
+  unavailable?: string[];
 }
 
 export interface CadenceMetrics {
@@ -107,6 +140,7 @@ export interface Recommendation {
 
 export interface AccountReport {
   generated_at: string;
+  platform: 'instagram' | 'tiktok';
   profile: UserProfile;
   overall_grade: Grade;
   overall_score: number;
@@ -122,4 +156,6 @@ export interface AccountReport {
   weaknesses: string[];
   recommendations: Recommendation[];
   media_analysis: MediaAnalysisItem[];
+  tiktok_metrics?: TikTokMetrics;
+  data_coverage: DataCoverage;
 }
