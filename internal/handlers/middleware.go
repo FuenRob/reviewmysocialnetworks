@@ -213,27 +213,20 @@ func Compression(next http.Handler) http.Handler {
 			return
 		}
 
-		w.Header().Add("Vary", "Accept-Encoding")
-		w.Header().Set("Content-Encoding", "gzip")
-		w.Header().Del("Content-Length")
-		writer, err := gzip.NewWriterLevel(w, gzip.BestSpeed)
-		if err != nil {
-			next.ServeHTTP(w, r)
-			return
+		writer := &gzipResponseWriter{ResponseWriter: w, statusCode: http.StatusOK}
+		next.ServeHTTP(writer, r)
+		if err := writer.close(); err != nil {
+			slog.Error("failed to close gzip writer", "error", err)
 		}
-		defer func(writer *gzip.Writer) {
-			err := writer.Close()
-			if err != nil {
-				slog.Error("failed to close gzip writer", "error", err)
-			}
-		}(writer)
-		next.ServeHTTP(&gzipResponseWriter{ResponseWriter: w, writer: writer}, r)
 	})
 }
 
 type gzipResponseWriter struct {
 	http.ResponseWriter
-	writer *gzip.Writer
+	writer          *gzip.Writer
+	statusCode      int
+	wroteHeader     bool
+	responseStarted bool
 }
 
 func (w *gzipResponseWriter) Unwrap() http.ResponseWriter {
@@ -241,25 +234,94 @@ func (w *gzipResponseWriter) Unwrap() http.ResponseWriter {
 }
 
 func (w *gzipResponseWriter) WriteHeader(statusCode int) {
-	w.Header().Del("Content-Length")
-	w.ResponseWriter.WriteHeader(statusCode)
+	if w.wroteHeader {
+		return
+	}
+	w.wroteHeader = true
+	w.statusCode = statusCode
 }
 
 func (w *gzipResponseWriter) Write(body []byte) (int, error) {
-	w.Header().Del("Content-Length")
+	if !w.wroteHeader {
+		w.WriteHeader(http.StatusOK)
+	}
+	if !statusAllowsBody(w.statusCode) || len(body) == 0 {
+		w.commitHeader()
+		return w.ResponseWriter.Write(body)
+	}
+	if err := w.startGzip(); err != nil {
+		return w.ResponseWriter.Write(body)
+	}
 	return w.writer.Write(body)
 }
 
 func (w *gzipResponseWriter) Flush() {
-	_ = w.writer.Flush()
+	if !w.wroteHeader {
+		w.WriteHeader(http.StatusOK)
+	}
+	if statusAllowsBody(w.statusCode) {
+		if err := w.startGzip(); err != nil {
+			return
+		}
+		_ = w.writer.Flush()
+	} else {
+		w.commitHeader()
+	}
 	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
 		flusher.Flush()
 	}
 }
 
 func (w *gzipResponseWriter) ReadFrom(reader io.Reader) (int64, error) {
-	w.Header().Del("Content-Length")
+	if !w.wroteHeader {
+		w.WriteHeader(http.StatusOK)
+	}
+	if !statusAllowsBody(w.statusCode) {
+		w.commitHeader()
+		return io.Copy(w.ResponseWriter, reader)
+	}
+	if err := w.startGzip(); err != nil {
+		return io.Copy(w.ResponseWriter, reader)
+	}
 	return io.Copy(w.writer, reader)
+}
+
+func (w *gzipResponseWriter) startGzip() error {
+	if w.writer != nil {
+		return nil
+	}
+	w.Header().Add("Vary", "Accept-Encoding")
+	w.Header().Set("Content-Encoding", "gzip")
+	w.Header().Del("Content-Length")
+	writer, err := gzip.NewWriterLevel(w.ResponseWriter, gzip.BestSpeed)
+	if err != nil {
+		w.Header().Del("Content-Encoding")
+		w.commitHeader()
+		return err
+	}
+	w.writer = writer
+	w.commitHeader()
+	return nil
+}
+
+func (w *gzipResponseWriter) commitHeader() {
+	if w.responseStarted {
+		return
+	}
+	w.responseStarted = true
+	w.ResponseWriter.WriteHeader(w.statusCode)
+}
+
+func (w *gzipResponseWriter) close() error {
+	if w.writer != nil {
+		return w.writer.Close()
+	}
+	w.commitHeader()
+	return nil
+}
+
+func statusAllowsBody(statusCode int) bool {
+	return statusCode >= http.StatusOK && statusCode != http.StatusNoContent && statusCode != http.StatusResetContent && statusCode != http.StatusNotModified
 }
 
 func acceptsGzip(value string) bool {

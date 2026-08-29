@@ -10,6 +10,7 @@ import (
 	"reviewmysocialnetworks/internal/analyzer"
 	"reviewmysocialnetworks/internal/config"
 	"reviewmysocialnetworks/internal/instagram"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -219,6 +220,31 @@ func TestCompressionProducesGzipResponse(t *testing.T) {
 	body, err := io.ReadAll(reader)
 	if err != nil || string(body) != `{"status":"ok"}` {
 		t.Fatalf("unexpected decompressed response %q: %v", body, err)
+	}
+}
+
+func TestCompressionDoesNotCompressResponsesWithoutBody(t *testing.T) {
+	for _, status := range []int{http.StatusNoContent, http.StatusResetContent, http.StatusNotModified} {
+		t.Run(strconv.Itoa(status), func(t *testing.T) {
+			handler := Compression(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(status)
+			}))
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			req.Header.Set("Accept-Encoding", "gzip")
+			w := httptest.NewRecorder()
+
+			handler.ServeHTTP(w, req)
+
+			if w.Code != status {
+				t.Fatalf("expected status %d, got %d", status, w.Code)
+			}
+			if w.Header().Get("Content-Encoding") != "" {
+				t.Fatalf("unexpected content encoding %q", w.Header().Get("Content-Encoding"))
+			}
+			if w.Body.Len() != 0 {
+				t.Fatalf("expected empty response body, got %d bytes", w.Body.Len())
+			}
+		})
 	}
 }
 
