@@ -21,22 +21,6 @@ export async function getAuthResult(): Promise<AccountReport> {
   return res.json();
 }
 
-export async function analyzeWithToken(accessToken: string, accountId?: string): Promise<AccountReport> {
-  const res = await fetch(`${API_BASE}/instagram/analyze/token`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      access_token: accessToken,
-      account_id: accountId || undefined,
-    }),
-  });
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error || 'Error al analizar la cuenta con el token de Instagram');
-  }
-  return res.json();
-}
-
 export async function analyzeDemo(tier: 'A' | 'B' | 'D' | 'F'): Promise<AccountReport> {
   const res = await fetch(`${API_BASE}/instagram/analyze/demo`, {
     method: 'POST',
@@ -64,18 +48,6 @@ export async function getTikTokAuthResult(): Promise<AccountReport> {
   if (!res.ok) {
     const err = await res.json();
     throw new Error(err.error || 'No se pudo completar el análisis de TikTok');
-  }
-  return res.json();
-}
-
-export async function analyzeTikTokWithToken(accessToken: string): Promise<AccountReport> {
-  const res = await fetch(`${API_BASE}/tiktok/analyze/token`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ access_token: accessToken }),
-  });
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error || 'Error al analizar TikTok con el token indicado');
   }
   return res.json();
 }
