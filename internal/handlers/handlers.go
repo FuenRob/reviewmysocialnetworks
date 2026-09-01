@@ -18,7 +18,6 @@ import (
 	"reviewmysocialnetworks/internal/config"
 	"reviewmysocialnetworks/internal/instagram"
 	"strings"
-	"sync"
 	"time"
 	"unicode/utf8"
 )
@@ -42,11 +41,11 @@ type authSession struct {
 
 type Handler struct {
 	cfg      *config.Config
-	sessions sync.Map
+	sessions *authSessionStore
 }
 
 func NewHandler(cfg *config.Config) *Handler {
-	return &Handler{cfg: cfg}
+	return &Handler{cfg: cfg, sessions: newAuthSessionStore(maxAuthSessions)}
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
@@ -89,14 +88,6 @@ func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleAuthURL(w http.ResponseWriter, r *http.Request) {
-	now := time.Now()
-	h.sessions.Range(func(key, value any) bool {
-		if session, ok := value.(authSession); ok && now.After(session.expiresAt) {
-			h.sessions.Delete(key)
-		}
-		return true
-	})
-
 	appID, appSecret, redirectURI, _ := h.cfg.Get()
 	if appID == "" || appSecret == "" {
 		respondError(w, http.StatusBadRequest, "Instagram App ID y Secret deben estar configurados en el archivo .env")
@@ -168,7 +159,10 @@ func (h *Handler) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 		redirectWithError(w, r, "session_creation_failed")
 		return
 	}
-	h.sessions.Store(sessionID, authSession{accessToken: tokenToUse, userID: userID, expiresAt: time.Now().Add(5 * time.Minute)})
+	if !h.sessions.Store(sessionID, authSession{accessToken: tokenToUse, userID: userID, expiresAt: time.Now().Add(5 * time.Minute)}) {
+		redirectWithError(w, r, "session_capacity_exceeded")
+		return
+	}
 	setPrivateCookie(w, r, authSessionCookie, sessionID, 5*time.Minute)
 	http.Redirect(w, r, "/#auth_success", http.StatusSeeOther)
 }
@@ -180,14 +174,9 @@ func (h *Handler) handleAuthResult(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	clearCookie(w, r, authSessionCookie)
-	value, ok := h.sessions.LoadAndDelete(cookie.Value)
+	session, ok := h.sessions.LoadAndDelete(cookie.Value)
 	if !ok {
 		respondError(w, http.StatusUnauthorized, "Sesión de autenticación inválida o ya utilizada")
-		return
-	}
-	session := value.(authSession)
-	if time.Now().After(session.expiresAt) {
-		respondError(w, http.StatusUnauthorized, "Sesión de autenticación caducada")
 		return
 	}
 	h.analyzeToken(w, r, session.accessToken, session.userID)

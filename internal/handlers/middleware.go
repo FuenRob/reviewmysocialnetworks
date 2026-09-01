@@ -148,13 +148,18 @@ type visitor struct {
 	count  int
 }
 
-var visitors = struct {
-	sync.Mutex
-	m map[string]visitor
-}{m: make(map[string]visitor)}
+const (
+	generalRequestsPerMinute  = 60
+	analysisRequestsPerMinute = 6
+	maxConcurrentAnalyses     = 4
+)
 
 func RateLimit(cfg *config.Config) Middleware {
 	trustProxy := cfg.IsTrustedProxy()
+	visitors := struct {
+		sync.Mutex
+		m map[string]visitor
+	}{m: make(map[string]visitor)}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if !strings.HasPrefix(r.URL.Path, "/api/") || r.URL.Path == "/api/health" {
@@ -164,13 +169,10 @@ func RateLimit(cfg *config.Config) Middleware {
 			host := clientIP(r, trustProxy)
 			now := time.Now()
 			visitors.Lock()
-			v := visitors.m[host]
-			if now.Sub(v.window) >= time.Minute {
-				v = visitor{window: now}
+			limited := incrementRateBucket(visitors.m, host, now, generalRequestsPerMinute)
+			if isExternalAnalysisRequest(r) {
+				limited = incrementRateBucket(visitors.m, host+"\x00analysis", now, analysisRequestsPerMinute) || limited
 			}
-			v.count++
-			visitors.m[host] = v
-			limited := v.count > 60
 			if len(visitors.m) > 10000 {
 				for key, value := range visitors.m {
 					if now.Sub(value.window) > 2*time.Minute {
@@ -187,6 +189,54 @@ func RateLimit(cfg *config.Config) Middleware {
 			}
 			next.ServeHTTP(w, r)
 		})
+	}
+}
+
+func incrementRateBucket(entries map[string]visitor, key string, now time.Time, limit int) bool {
+	v := entries[key]
+	if v.window.IsZero() || now.Sub(v.window) >= time.Minute {
+		v = visitor{window: now}
+	}
+	v.count++
+	entries[key] = v
+	return v.count > limit
+}
+
+func AnalysisConcurrency() Middleware {
+	return analysisConcurrency(maxConcurrentAnalyses)
+}
+
+func analysisConcurrency(limit int) Middleware {
+	if limit < 1 {
+		limit = 1
+	}
+	slots := make(chan struct{}, limit)
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if !isExternalAnalysisRequest(r) {
+				next.ServeHTTP(w, r)
+				return
+			}
+			select {
+			case slots <- struct{}{}:
+				defer func() { <-slots }()
+				next.ServeHTTP(w, r)
+			default:
+				w.Header().Set("Retry-After", "1")
+				respondError(w, http.StatusTooManyRequests, "Hay demasiados análisis en curso; inténtalo de nuevo en unos segundos")
+			}
+		})
+	}
+}
+
+func isExternalAnalysisRequest(r *http.Request) bool {
+	switch r.URL.Path {
+	case "/api/instagram/auth/result", "/api/tiktok/auth/result":
+		return r.Method == http.MethodGet
+	case "/api/instagram/analyze/token", "/api/tiktok/analyze/token":
+		return r.Method == http.MethodPost
+	default:
+		return false
 	}
 }
 

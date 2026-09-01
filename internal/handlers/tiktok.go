@@ -57,7 +57,10 @@ func (h *Handler) handleTikTokAuthCallback(w http.ResponseWriter, r *http.Reques
 		redirectTikTokError(w, r, "session_creation_failed")
 		return
 	}
-	h.sessions.Store(sessionID, authSession{accessToken: token.AccessToken, userID: token.OpenID, expiresAt: time.Now().Add(5 * time.Minute)})
+	if !h.sessions.Store(sessionID, authSession{accessToken: token.AccessToken, userID: token.OpenID, expiresAt: time.Now().Add(5 * time.Minute)}) {
+		redirectTikTokError(w, r, "session_capacity_exceeded")
+		return
+	}
 	setPrivateCookie(w, r, tiktokSessionCookie, sessionID, 5*time.Minute)
 	http.Redirect(w, r, "/#tiktok_auth_success", http.StatusSeeOther)
 }
@@ -69,14 +72,9 @@ func (h *Handler) handleTikTokAuthResult(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	clearCookie(w, r, tiktokSessionCookie)
-	value, ok := h.sessions.LoadAndDelete(cookie.Value)
+	session, ok := h.sessions.LoadAndDelete(cookie.Value)
 	if !ok {
 		respondError(w, http.StatusUnauthorized, "Sesión de TikTok inválida o ya utilizada")
-		return
-	}
-	session := value.(authSession)
-	if time.Now().After(session.expiresAt) {
-		respondError(w, http.StatusUnauthorized, "Sesión de TikTok caducada")
 		return
 	}
 	h.analyzeTikTokToken(w, r, session.accessToken)

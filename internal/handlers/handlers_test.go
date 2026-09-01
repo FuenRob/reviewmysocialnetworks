@@ -306,3 +306,58 @@ func TestMetricsEndpointUsesPrometheusFormat(t *testing.T) {
 		t.Fatalf("unexpected metrics response: status=%d body=%q", w.Code, w.Body.String())
 	}
 }
+
+func TestRateLimitUsesLowerLimitForExternalAnalyses(t *testing.T) {
+	handler := RateLimit(&config.Config{})(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	for requestNumber := 1; requestNumber <= analysisRequestsPerMinute+1; requestNumber++ {
+		req := httptest.NewRequest(http.MethodPost, "/api/tiktok/analyze/token", nil)
+		req.RemoteAddr = "192.0.2.25:1234"
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+
+		if requestNumber <= analysisRequestsPerMinute && w.Code != http.StatusNoContent {
+			t.Fatalf("request %d was limited early with status %d", requestNumber, w.Code)
+		}
+		if requestNumber == analysisRequestsPerMinute+1 && w.Code != http.StatusTooManyRequests {
+			t.Fatalf("expected request %d to be limited, got status %d", requestNumber, w.Code)
+		}
+	}
+}
+
+func TestAnalysisConcurrencyRejectsExcessWork(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	done := make(chan struct{})
+	handler := analysisConcurrency(1)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		close(started)
+		<-release
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	firstRequest := httptest.NewRequest(http.MethodPost, "/api/instagram/analyze/token", nil)
+	firstResponse := httptest.NewRecorder()
+	go func() {
+		defer close(done)
+		handler.ServeHTTP(firstResponse, firstRequest)
+	}()
+	<-started
+
+	secondRequest := httptest.NewRequest(http.MethodPost, "/api/tiktok/analyze/token", nil)
+	secondResponse := httptest.NewRecorder()
+	handler.ServeHTTP(secondResponse, secondRequest)
+	if secondResponse.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected excess analysis to be rejected, got %d", secondResponse.Code)
+	}
+	if secondResponse.Header().Get("Retry-After") == "" {
+		t.Fatal("limited response did not include Retry-After")
+	}
+
+	close(release)
+	<-done
+	if firstResponse.Code != http.StatusNoContent {
+		t.Fatalf("first analysis did not complete: %d", firstResponse.Code)
+	}
+}

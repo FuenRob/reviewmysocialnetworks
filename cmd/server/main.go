@@ -34,7 +34,7 @@ func main() {
 	webDist := filepath.Join(".", "web", "dist")
 	mux.HandleFunc("/", handlers.SPAHandler(webDist))
 
-	handler := handlers.Chain(mux, handlers.Compression, handlers.Logger, handlers.Recovery, handlers.SecurityHeaders, handlers.CORS(cfg), handlers.RateLimit(cfg))
+	handler := handlers.Chain(mux, handlers.Compression, handlers.Logger, handlers.Recovery, handlers.SecurityHeaders, handlers.CORS(cfg), handlers.RateLimit(cfg), handlers.AnalysisConcurrency())
 
 	server := &http.Server{
 		Addr:              ":" + port,
