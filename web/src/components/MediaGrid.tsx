@@ -74,7 +74,7 @@ export const MediaGrid: React.FC<Props> = ({ media, platform }) => {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredMedia.map((item) => {
+        {filteredMedia.map((item, index) => {
           const badge = getFormatBadge(item.media_type);
           const BadgeIcon = badge.icon;
           const dateStr = new Date(item.timestamp).toLocaleDateString('es-ES', {
@@ -93,6 +93,10 @@ export const MediaGrid: React.FC<Props> = ({ media, platform }) => {
                 <img
                   src={item.thumbnail_url || item.media_url || 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=600&auto=format&fit=crop&q=80'}
                   alt={item.caption || `Publicación de ${platform === 'tiktok' ? 'TikTok' : 'Instagram'}`}
+                  loading={index < 3 ? 'eager' : 'lazy'}
+                  decoding="async"
+                  fetchPriority={index < 3 ? 'high' : 'low'}
+                  referrerPolicy="no-referrer"
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                 />
 
