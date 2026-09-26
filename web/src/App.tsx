@@ -9,6 +9,7 @@ import { ReportActionPlan } from './components/ReportActionPlan';
 import { MediaGrid } from './components/MediaGrid';
 import { PreFooter } from './components/PreFooter';
 import { LegalModal, type LegalDocType } from './components/LegalModal';
+import { PrivacyPolicyPage } from './components/PrivacyPolicyPage';
 import { ArrowUp } from 'lucide-react';
 
 const EngagementCharts = lazy(() => import('./components/EngagementCharts').then((module) => ({ default: module.EngagementCharts })));
@@ -81,6 +82,10 @@ export const App: React.FC = () => {
     setGlobalError(null);
   };
 
+  if (window.location.pathname === '/privacy-policy' || window.location.pathname === '/privacidad') {
+    return <PrivacyPolicyPage />;
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-pink-500/30 selection:text-pink-200">
       <Navbar
@@ -152,12 +157,12 @@ export const App: React.FC = () => {
               Aviso Legal
             </button>
             <span className="text-slate-700">•</span>
-            <button
-              onClick={() => handleOpenLegal('privacidad')}
+            <a
+              href="/privacy-policy"
               className="text-slate-400 hover:text-slate-200 transition-colors"
             >
               Privacidad
-            </button>
+            </a>
             <span className="text-slate-700">•</span>
             <button
               onClick={() => handleOpenLegal('cookies')}
