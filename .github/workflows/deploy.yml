@@ -85,8 +85,7 @@ jobs:
           import os
 
           key = os.environ["VPS_SSH_KEY"].replace("\r\n", "\n").replace("\r", "\n")
-          if "\n" not in key and "\\n" in key:
-              key = key.replace("\\n", "\n")
+          key = key.replace("\\n", "\n")
           if not key.endswith("\n"):
               key += "\n"
           print(key, end="")
