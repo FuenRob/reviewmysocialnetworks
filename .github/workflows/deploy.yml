@@ -84,8 +84,8 @@ jobs:
           python <<'PY' > ~/.ssh/deploy_key
           import os
 
-          key = os.environ["VPS_SSH_KEY"].replace("\r\n", "\n").replace("\r", "\n")
-          key = key.replace("\\n", "\n")
+          key = os.environ["VPS_SSH_KEY"].replace("\\n", "\n")
+          key = key.replace("\r\n", "\n").replace("\r", "\n")
           if not key.endswith("\n"):
               key += "\n"
           print(key, end="")
