@@ -162,3 +162,7 @@ jobs:
               rm -rf -- "$old_release"
             done
           REMOTE
+
+      - name: Remove SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
