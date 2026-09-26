@@ -72,13 +72,13 @@ export const PreFooter: React.FC<Props> = ({ onOpenLegal }) => {
                 </button>
               </li>
               <li>
-                <button
-                  onClick={() => onOpenLegal('terminos')}
+                <a
+                  href="/terms-of-service"
                   className="text-slate-400 hover:text-pink-400 transition-colors flex items-center gap-2 text-left"
                 >
                   <Shield className="w-3.5 h-3.5 text-slate-500" />
                   Términos y Condiciones de Uso
-                </button>
+                </a>
               </li>
               <li>
                 <button

@@ -10,6 +10,7 @@ import { MediaGrid } from './components/MediaGrid';
 import { PreFooter } from './components/PreFooter';
 import { LegalModal, type LegalDocType } from './components/LegalModal';
 import { PrivacyPolicyPage } from './components/PrivacyPolicyPage';
+import { TermsOfServicePage } from './components/TermsOfServicePage';
 import { ArrowUp } from 'lucide-react';
 
 const EngagementCharts = lazy(() => import('./components/EngagementCharts').then((module) => ({ default: module.EngagementCharts })));
@@ -84,6 +85,9 @@ export const App: React.FC = () => {
 
   if (window.location.pathname === '/privacy-policy' || window.location.pathname === '/privacidad') {
     return <PrivacyPolicyPage />;
+  }
+  if (window.location.pathname === '/terms-of-service' || window.location.pathname === '/terminos') {
+    return <TermsOfServicePage />;
   }
 
   return (
@@ -171,12 +175,12 @@ export const App: React.FC = () => {
               Cookies
             </button>
             <span className="text-slate-700">•</span>
-            <button
-              onClick={() => handleOpenLegal('terminos')}
+            <a
+              href="/terms-of-service"
               className="text-slate-400 hover:text-slate-200 transition-colors"
             >
               Términos
-            </button>
+            </a>
             <span className="text-slate-700">•</span>
             <button
               onClick={() => handleOpenLegal('eliminacion-datos')}

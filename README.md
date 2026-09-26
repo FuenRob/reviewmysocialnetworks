@@ -78,6 +78,11 @@ La política de privacidad pública para registrar tanto en Instagram/Meta como 
 
 En desarrollo, la misma página se puede abrir en `http://localhost:8080/privacy-policy`. También existe el alias `/privacidad`.
 
+Los términos públicos del servicio están disponibles en:
+`https://tu-dominio.example/terms-of-service`
+
+En desarrollo, se pueden abrir en `http://localhost:8080/terms-of-service`. También existe el alias `/terminos`.
+
 Activa `TRUST_PROXY=true` únicamente cuando el backend no sea accesible directamente y todo el tráfico atraviese un proxy inverso de confianza (por ejemplo, un túnel de Cloudflare). Así el rate limiter puede usar la IP original sin aceptar cabeceras falsificadas desde Internet.
 En contenedores o Kubernetes puedes proporcionar cualquier variable mediante un archivo usando el sufijo `_FILE`; la variable directa tiene prioridad. Esto evita copiar secretos al manifiesto o a la imagen.
 > *Nota*: También puedes configurar o cambiar el `App ID` y `App Secret` directamente desde el modal de ajustes en la interfaz web sin necesidad de editar archivos.
