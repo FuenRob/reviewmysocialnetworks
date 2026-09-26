@@ -1,8 +1,7 @@
 import React from 'react';
 import { Shield, Lock, FileText, Cookie, Trash2, CheckCircle2 } from 'lucide-react';
-import { InstagramIcon } from './InstagramIcon';
-import { TikTokIcon } from './TikTokIcon';
 import type { LegalDocType } from './LegalModal';
+import logo from '../assets/review-my-social-networks-logo.png';
 
 interface Props {
   onOpenLegal: (doc: LegalDocType) => void;
@@ -15,11 +14,11 @@ export const PreFooter: React.FC<Props> = ({ onOpenLegal }) => {
         <div className="grid grid-cols-1 md:grid-cols-12 gap-8 lg:gap-12 pb-10 border-b border-slate-900">
           <div className="md:col-span-5 space-y-4">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-yellow-500 via-pink-500 to-purple-600 p-0.5 shadow-md shadow-pink-500/10">
-                <div className="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center">
-                  <div className="flex items-center"><InstagramIcon className="w-4 h-4 text-white" /><TikTokIcon className="w-3.5 h-3.5 text-white -ml-1" /></div>
-                </div>
-              </div>
+              <img
+                src={logo}
+                alt="ReviewMySocialNetworks"
+                className="w-9 h-9 object-contain drop-shadow-md drop-shadow-indigo-500/20"
+              />
               <span className="text-base font-black tracking-tight text-white">
                 ReviewMy<span className="bg-gradient-to-r from-pink-500 to-purple-400 bg-clip-text text-transparent">SocialNetworks</span>
               </span>

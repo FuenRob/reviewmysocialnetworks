@@ -1,7 +1,7 @@
 import React from 'react';
 import { RefreshCw, Printer } from 'lucide-react';
-import { InstagramIcon } from './InstagramIcon';
 import type { AccountReport } from '../types/instagram';
+import logo from '../assets/review-my-social-networks-logo.png';
 
 interface Props {
   onReset: () => void;
@@ -25,11 +25,11 @@ export const Navbar: React.FC<Props> = ({
           onClick={onReset}
           className="flex items-center gap-3 cursor-pointer group"
         >
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-yellow-500 via-pink-500 to-purple-600 p-0.5 shadow-lg shadow-pink-500/20 group-hover:scale-105 transition-transform">
-            <div className="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center">
-              <InstagramIcon className="w-5 h-5 text-white" />
-            </div>
-          </div>
+          <img
+            src={logo}
+            alt="ReviewMySocialNetworks"
+            className="w-10 h-10 object-contain drop-shadow-lg drop-shadow-indigo-500/20 group-hover:scale-105 transition-transform"
+          />
           <div>
             <span className="text-base font-black tracking-tight text-white flex items-center gap-1.5">
               ReviewMy<span className="bg-gradient-to-r from-pink-500 to-purple-400 bg-clip-text text-transparent">SocialNetworks</span>
